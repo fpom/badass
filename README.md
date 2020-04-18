@@ -13,7 +13,7 @@ But it cannot test:
 
  * code readability and clarity
  * algorithm relevance and quality
- * all the aspects one would like to test on good projects
+ * all such aspects one would like to test on good projects
 
 So, bad projects are likely to fail on the first group of tests, while
 good project will pass and thus remain to be assessed manually.
@@ -44,7 +44,7 @@ In the future versions, we may have:
    set of tests
  * final assessment on extended test
  * copy/paste detection between projects
- * a library of standard tests on source code and `strace` log
+ * a library of standard tests on source code and `strace` logs
 
 ## Licence
 
@@ -54,12 +54,12 @@ In the future versions, we may have:
 > it under the terms of the GNU General Public License as published by
 > the Free Software Foundation, either version 3 of the License, or
 > (at your option) any later version.
- 
+> 
 > This program is distributed in the hope that it will be useful, but
 > WITHOUT ANY WARRANTY; without even the implied warranty of
 > MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 > General Public License for more details.
- 
+> 
 > You should have received a copy of the GNU General Public License
 > along with this program. If not,
 > see <https://www.gnu.org/licenses/>.
