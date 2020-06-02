@@ -1,8 +1,7 @@
 from pathlib import Path
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, DEVNULL
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
-import pandas as pd
 
 class SEvent (object) :
     def __init__ (self, pid, time, kind, **info) :
@@ -26,8 +25,7 @@ class STrace (object) :
     def parse (cls, lines) :
         self = cls()
         started = {}
-        for pid, time, info in (l.strip().split(None, 2) for l in lines
-                                if not l.endswith("+++")) :
+        for pid, time, info in (l.strip().split(None, 2) for l in lines) :
             if info.endswith("<unfinished ...>") :
                 name = info.split("(", 1)[0]
                 started[pid] = call(pid, time, info[:-16], f"<... {name} resumed>")
@@ -60,19 +58,24 @@ class STrace (object) :
                                         ret=ret.strip()))
         return self
 
-class OneAss (object) :
+class AssRunner (object) :
     def __init__ (self, *files) :
         self.files = [Path(f) for f in files]
     def __call__ (self, path) :
         path = Path(path)
         script = (["cp -f '{}' .".format(p.absolute()) for p in self.files
                    if p.name != "build.sh" or not (path / "build.sh").exists()]
-                  + ["sh build.sh >build.out 2>build.err",
+                  + ["sh prepare.sh >prep.out 2>prep.err",
+                     "echo $? > prep.ret",
+                     "sh build.sh >build.out 2>build.err",
                      "echo $? > build.ret",
-                     "strace -f -r -o run.sys ./a.out >run.out 2>run.err",
+                     "strace -f -r -o run.sys ./a.out >run.out 2>run.err </dev/null",
                      "echo $? > run.ret",
                      "touch run.ass run.sys",
                      "set -x",
+                     "cat prep.ret",
+                     "cat prep.out",
+                     "cat prep.err",
                      "cat build.ret",
                      "cat build.out",
                      "cat build.err",
@@ -90,8 +93,8 @@ class OneAss (object) :
                           "--allow-debuggers",
                           "sh", tmp.name],
                          cwd=path,
-                         stdout=PIPE,
-                         stderr=STDOUT,
+                         stdout=DEVNULL,
+                         stderr=DEVNULL,
                          encoding="utf-8")
             proc.wait()
         run = {}
@@ -115,38 +118,3 @@ class OneAss (object) :
             elif key.endswith(".sys") :
                 run[key] = STrace.parse(val)
         return run
-
-class GroupAss (object) :
-    def __init__ (self, path,
-                  morefiles=["badass.h"],
-                  include=["*.c", "*.h", "build.sh", "Makefile"]) :
-        self.path = Path(path)
-        self.one = OneAss(*morefiles, *(p for g in include for p in self.path.glob(g)
-                                        if p.is_file()))
-    def __iter__ (self) :
-        for path in self.path.glob("*") :
-            if path.is_dir() :
-                yield path.name, self.one(path)
-    def save (self, path) :
-        data = dict(self)
-        df = pd.DataFrame(index=sorted(data))
-        for name, assess in data.items() :
-            for key, val in assess.items() :
-                if key == "run.sys" :
-                    continue
-                elif key == "run.ass" :
-                    for ass, (res, test) in val.items() :
-                        if ass not in df.columns :
-                            df[ass] = pd.Series(None, index=df.index, dtype=int)
-                        if res == "passed" :
-                            df.loc[name,ass] = 1
-                        elif res == "failed" :
-                            df.loc[name,ass] = 0
-                else :
-                    if key not in df.columns :
-                        if key.endswith(".ret") :
-                            df[key] = pd.Series(None, index=df.index, dtype=int)
-                        else :
-                            df[key] = pd.Series(None, index=df.index, dtype=str)
-                    df.loc[name, key] = val
-        df.to_csv(path)

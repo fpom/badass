@@ -6,3 +6,7 @@
 __pycache__
 +*
 ,*
+/bad
+/bad.db
+a.out
+*.sys

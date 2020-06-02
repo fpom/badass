@@ -1,29 +1,50 @@
 from lxml import etree
 
-from clang.cindex import Index, Config
+from clang.cindex import Index, Config, CursorKind
 if not getattr(Config, "library_file", None) :
     Config.set_library_file("/usr/lib/llvm-9/lib/libclang.so")
 
-class C (object) :
-    def __init__ (self, path) :
+class Source (object) :
+    def __init__ (self, path, source=None) :
         self.p = path
-        self.s = open(path).read().splitlines()
         self.i = Index.create()
-        self.t = self.i.parse(path)
+        if source is None :
+            self.s = open(path).read().splitlines()
+            self.t = self.i.parse(path)
+        else :
+            self.s = source.splitlines()
+            self.t = self.i.parse(path, unsaved_files=[(path, source)])
         self.d = {}
         for child in self.t.cursor.get_children() :
-            if child.location.file.name == path and child.is_definition() :
+            if (child.location.file.name == path
+                and (child.is_definition()
+                     or child.kind in (CursorKind.ENUM_CONSTANT_DECL,
+                                       CursorKind.ENUM_DECL,
+                                       CursorKind.FUNCTION_DECL,
+                                       CursorKind.STRUCT_DECL,
+                                       CursorKind.TYPEDEF_DECL,
+                                       CursorKind.TYPE_ALIAS_DECL,
+                                       CursorKind.UNION_DECL,
+                                       CursorKind.VAR_DECL))) :
                 self.d[child.spelling] = child
         self.x = self.xml()
     def __iter__ (self) :
         return iter(self.d)
-    def __repr__ (self) :
-        return "\n".join(self.s)
+    def src (self) :
+        return "\n".join(self.s) + "\n"
+    def add (self, src) :
+        self.s.extend(src.splitlines())
     def node (self, name) :
         return self.d[name]
     def sig (self, name) :
         decl = self.d[name]
-        return f"{decl.result_type.spelling} {decl.displayname}"
+        if decl.result_type.spelling :
+            return f"{decl.result_type.spelling} {decl.displayname}"
+        else :
+            return f"{decl.displayname}"
+    def loc (self, name) :
+        decl = self.d[name]
+        return self.p, decl.extent.start.line, decl.extent.end.line
     def _get_slice (self, sl, sc, el, ec) :
         lines = self.s[sl-1:el]
         lines[0] = lines[0][sc-1:]
@@ -63,7 +84,12 @@ class C (object) :
             return self._x[val]
     def xml (self) :
         self._x = {}
-        root = etree.Element("CTU", file=self.p)
+        root = etree.Element("CTU",
+                             file=self.p,
+                             startline=str(self.t.cursor.extent.start.line),
+                             startcol=str(self.t.cursor.extent.start.column),
+                             endline=str(self.t.cursor.extent.end.line),
+                             endcol=str(self.t.cursor.extent.end.column))
         for child in self.t.cursor.get_children() :
             if child.location.file.name == self.p :
                 self._xml(child, root)
