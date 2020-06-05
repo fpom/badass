@@ -1,5 +1,6 @@
+import signal
 from pathlib import Path
-from subprocess import Popen, DEVNULL
+from subprocess import Popen, STDOUT, PIPE
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
 
@@ -13,7 +14,8 @@ class SEvent (object) :
             setattr(self, key, val)
     def __repr__ (self) :
         return (f"{self.__class__.__name__}({self.pid}, {self.time:f}, {self.kind!r}, "
-                + ", ".join(f"{k}={v!r}" for k, v in self._info.items()))
+                + ", ".join(f"{k}={v!r}" for k, v in self._info.items())
+                + ")")
 
 call = namedtuple("call", ["pid", "time", "head", "resume"])
 
@@ -21,6 +23,20 @@ class STrace (object) :
     def __init__ (self) :
         self.pids = {}
         self.root = None
+    def write (self, stream) :
+        stream.write(repr((self.root, self.pids)))
+    def _print (self, out) :
+        for pid, events in sorted(self.pids.items()) :
+            if pid == self.root :
+                out.write(f"> {pid} (parent)\n")
+            else :
+                out.write(f"> {pid} (child)\n")
+            for evt in self.pids[pid] :
+                out.write(f"  {evt}\n")
+    @classmethod
+    def read (cls, stream) :
+        self = cls()
+        self.root, self.pids = eval(stream.read())
     @classmethod
     def parse (cls, lines) :
         self = cls()
@@ -40,8 +56,18 @@ class STrace (object) :
             if pid not in self.pids :
                 self.pids[pid] = []
             if info.startswith("+++") :
-                self.pids[pid].append(SEvent(pid, time, "exit",
-                                             code=int(info.split()[3])))
+                status = info.split()[3]
+                try :
+                    code = int(status)
+                    evt = "exit"
+                except :
+                    if hasattr(signal, status) :
+                        code = status
+                        evt = "killed"
+                    else :
+                        code = status
+                        evt = "died"
+                self.pids[pid].append(SEvent(pid, time, evt, code=code))
             elif info.startswith("---") :
                 info = info.strip("- ")
                 sig, info = info.split(None, 1)
@@ -53,52 +79,56 @@ class STrace (object) :
                 name = info.split("(", 1)[0]
                 params, ret = info[len(name):].rsplit("=", 1)
                 self.pids[pid].append(SEvent(pid, time, "call",
-                                        name=name.strip(),
-                                        params=params.strip(),
-                                        ret=ret.strip()))
+                                             name=name.strip(),
+                                             params=params.strip(),
+                                             ret=ret.strip()))
         return self
 
 class AssRunner (object) :
-    def __init__ (self, *files) :
-        self.files = [Path(f) for f in files]
-    def __call__ (self, path) :
-        path = Path(path)
-        script = (["cp -f '{}' .".format(p.absolute()) for p in self.files
-                   if p.name != "build.sh" or not (path / "build.sh").exists()]
-                  + ["sh prepare.sh >prep.out 2>prep.err",
-                     "echo $? > prep.ret",
-                     "sh build.sh >build.out 2>build.err",
-                     "echo $? > build.ret",
-                     "strace -f -r -o run.sys ./a.out >run.out 2>run.err </dev/null",
-                     "echo $? > run.ret",
-                     "touch run.ass run.sys",
-                     "set -x",
-                     "cat prep.ret",
-                     "cat prep.out",
-                     "cat prep.err",
-                     "cat build.ret",
-                     "cat build.out",
-                     "cat build.err",
-                     "cat run.ret",
-                     "cat run.out",
-                     "cat run.err",
-                     "cat run.ass",
-                     "cat run.sys"])
-        with NamedTemporaryFile(mode="w", dir=path, suffix=".sh") as tmp :
+    def __init__ (self, add, rep) :
+        self.add = [Path(p).absolute() for p in add]
+        self.rep = [Path(p).absolute() for p in rep]
+    def __call__ (self, path, timeout=60) :
+        proj = Path(path)
+        script = []
+        script.extend(f"cp -f '{p}' ." for p in self.rep)
+        script.extend(f"cp -f '{p}' ." for p in self.add
+                      if not (proj / p.name).exists())
+        script.extend(["sh prepare.sh >prep.out 2>prep.err",
+                       "echo $? > prep.ret",
+                       "sh build.sh >build.out 2>build.err",
+                       "echo $? > build.ret",
+                       "strace -f -r -o run.sys ./a.out >run.out 2>run.err </dev/null",
+                       "echo $? > run.ret",
+                       "touch run.ass run.sys",
+                       "set -x",
+                       "cat prep.ret",
+                       "cat prep.out",
+                       "cat prep.err",
+                       "cat build.ret",
+                       "cat build.out",
+                       "cat build.err",
+                       "cat run.ret",
+                       "cat run.out",
+                       "cat run.err",
+                       "cat run.ass",
+                       "cat run.sys"])
+        with NamedTemporaryFile(mode="w", dir=proj, suffix=".sh") as tmp :
             tmp.write("\n".join(script) + "\n")
             tmp.flush()
             proc = Popen(["firejail",
                           "--quiet",
                           "--overlay-tmpfs",
                           "--allow-debuggers",
+                          f"--rlimit-cpu={timeout}",
                           "sh", tmp.name],
-                         cwd=path,
-                         stdout=DEVNULL,
-                         stderr=DEVNULL,
+                         cwd=proj,
+                         stdout=PIPE,
+                         stderr=STDOUT,
                          encoding="utf-8")
             proc.wait()
         run = {}
-        buf = run["out+err"] = []
+        buf = []
         for line in (l.rstrip() for l in proc.stdout) :
             if line.startswith("+ cat ") :
                 buf = run[line.split()[-1]] = []

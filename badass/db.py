@@ -1,4 +1,4 @@
-import sqlite3, pathlib, time
+import sqlite3, pathlib, time, collections
 
 class DB (object) :
     def __init__ (self, path) :
@@ -10,8 +10,10 @@ class DB (object) :
                           "prep_ret", "prep_out", "prep_err",
                           "build_ret", "build_out", "build_err",
                           "run_ret", "run_out", "run_err", "run_sys", "run_ass")
+        self._runs_row = collections.namedtuple("row", self.runs_cols)
         self._runs = ",".join("?" for c in self.runs_cols)
         self.checks_cols = ("date", "project", "test", "result")
+        self._checks_row = collections.namedtuple("row", self.checks_cols)
         self._checks = ",".join("?" for c in self.checks_cols)
         self._create()
     def __del__ (self) :
@@ -40,31 +42,51 @@ class DB (object) :
         except :
             self.d.rollback()
             raise
+    def _rows (self, table) :
+        rtype = getattr(self, f"_{table}_row")
+        rows = self.c.execute(f"SELECT * FROM {table} ORDER by date")
+        while True :
+            r = rows.fetchone()
+            if r is None :
+                break
+            yield rtype(*r)
+    def runs (self) :
+        return self._rows("runs")
+    def checks (self) :
+        return self._rows("checks")
     def add_run (self, project, test, run) :
         now = time.strftime("%Y-%m-%d %H:%M:%S")
         now_d, now_t = now.split()
-        base_dir = pathlib.Path(self.p / now_d / "-".join(now_t.split(":")[:2]))
-        base_dir.mkdir(parents=True, exist_ok=True)
-        now, base_dir = self._now()
+        dup = 0
+        base_dir = pathlib.Path(self.p
+                                / now_d
+                                / "-".join(now_t.split(":")[:2])
+                                / f"{project}.{dup}")
+        while base_dir.exists() :
+            dup += 1
+            base_dir = base_dir.parent / f"{project}.{dup}"
+        base_dir.mkdir(parents=True)
         cols = [now, project, test]
         for name in ["prep", "build", "run"] :
             for ext in ["ret", "out", "err", "sys", "ass"] :
                 if name != "run" and ext in ("sys", "ass") :
                     continue
                 key = f"{name}.{ext}"
-                val = run[key]
-                if isinstance(val, (int, float)) :
-                    cols.append(val)
+                val = run.get(key, None)
+                if val is None :
+                    cols.append(None)
+                elif isinstance(val, (int, float)) :
+                    cols.append(str(val))
                 elif isinstance(val, (list, tuple, dict)) :
-                    cols.append(base_dir / key)
+                    cols.append(str(base_dir / key))
                     with open(cols[-1], "w") as f :
                         f.write(repr(val))
                 elif isinstance(val, str) :
-                    cols.append(base_dir / key)
+                    cols.append(str(base_dir / key))
                     with open(cols[-1], "w") as f :
                         f.write(val)
                 elif callable(getattr(val, "write", None)) :
-                    cols.append(base_dir / key)
+                    cols.append(str(base_dir / key))
                     with open(cols[-1], "w") as f :
                         val.write(f)
                 else :

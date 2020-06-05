@@ -1,5 +1,6 @@
-import argparse, pathlib, importlib, sys, functools
+import argparse, pathlib, importlib, sys, functools, ast
 import lxml.etree
+import pandas as pd
 from colorama import init as colorama_init, Fore, Style
 from .db import DB
 
@@ -18,16 +19,24 @@ def record (method) :
                 db.add_run(project, test, ret)
             else :
                 db.add_check(project, test, ret)
-        db.close()
+            db.close()
         return ret
     return wrapper
 
+def _const (val) :
+    if isinstance(val, str) :
+        val = ast.literal_eval(val)
+    if isinstance(val, bool) :
+        return int(val)
+    else :
+        return val
+
 class BadassCLI (object) :
-    def __init__ (self, path, out, log) :
+    def __init__ (self, path, out, log, lang) :
         self.path = pathlib.Path(path)
         self.out = out
         self.log = log
-        self.mod = {}
+        self.mod = importlib.import_module("." + lang.lower(), "badass")
         self.src = {}
     def __call__ (self, args) :
         cmd = getattr(self, "do_" + args.command)
@@ -37,12 +46,7 @@ class BadassCLI (object) :
         path = (self.path / pathlib.Path(".//" + str(path))).relative_to(self.path)
         if path in self.src :
             return self.src[path]
-        fmt = path.suffix.lstrip(".").lower()
-        if fmt in self.mod :
-            mod = self.mod[fmt]
-        else :
-            mod = self.mod[fmt] = importlib.import_module("." + fmt, "badass")
-        src = self.src[path] = mod.source.Source(str(self.path / path), source)
+        src = self.src[path] = self.mod.source.Source(str(self.path / path), source)
         return src
     ##
     ## patch
@@ -113,14 +117,17 @@ class BadassCLI (object) :
     @record
     def do_has (self, args) :
         patt, path = args.decl.split("@", 1)
-        self._has = getattr(self, "_has", 0) + 1
-        decl = self._source_load(f".{self._has}.c", patt + ";")
+        self._csrc = getattr(self, "_csrc", 0) + 1
+        decl = self._source_load(f".{self._csrc}.c", patt + ";")
         name = next(iter(decl.d))
-        code = self._source_load(path)
-        if decl.sig(name) == name :
-            found = name in code.d
-        else :
-            found = name in code.d and decl.sig(name) == code.sig(name)
+        try :
+            code = self._source_load(path)
+            if decl.sig(name) == name :
+                found = name in code.d
+            else :
+                found = name in code.d and decl.sig(name) == code.sig(name)
+        except FileNotFoundError :
+            found = False
         if found :
             patt = code.sig(name)
             path, line, _ = code.loc(name)
@@ -133,6 +140,66 @@ class BadassCLI (object) :
                            f"{path}\n")
         self.out.write(f"{int(found)}\n")
         return found
+    ##
+    ## cparse
+    ##
+    def do_cparse (self, args) :
+        self._csrc = getattr(self, "_csrc", 0) + 1
+        src = self._source_load(f".{self._csrc}.c", args.code)
+        xml = lxml.etree.tostring(src.x, pretty_print=True, encoding="utf-8")
+        self.out.write(xml.decode("utf-8"))
+        self.out.write("\n")
+    ##
+    ## run
+    ##
+    _runcolor = {"out" : Fore.GREEN,
+                 "err" : Fore.RED,
+                 "sys" : Fore.MAGENTA,
+                 "ret" : Fore.BLUE,
+                 "*"   : Fore.YELLOW}
+    @record
+    def do_run (self, args) :
+        self.log.write(f"{Fore.BLUE}{Style.BRIGHT}run{Style.RESET_ALL} {args.base}\n")
+        add, rep = set(), set()
+        for a in args.add :
+            add.update(a)
+        for a in args.replace :
+            rep.update(a)
+        runner = self.mod.run.AssRunner(add, rep)
+        run = runner(args.base, timeout=args.timeout)
+        for key, val in run.items() :
+            if not getattr(args, key.rsplit(".", 1)[-1], None) :
+                continue
+            elif val is None or (isinstance(val, str) and not val) :
+                continue
+            color = self._runcolor.get(key.split(".", 1)[-1], self._runcolor["*"])
+            self.out.write(f"{color}=== {key} ==={Style.RESET_ALL}\n")
+            if isinstance(val, str) :
+                self.out.write(val)
+            elif getattr(val, "_print", None) :
+                getattr(val, "_print")(self.out)
+            else :
+                self.out.write(repr(val))
+            self.out.write("\n")
+        return run
+    ##
+    ## report
+    ##
+    def do_report (self, args) :
+        self.log.write(f"{Fore.BLUE}{Style.BRIGHT}save{Style.RESET_ALL} {args.outfile}\n")
+        db = DB(args.db)
+        data = {}
+        for row in db.checks() :
+            data.setdefault(row.project, {})
+            data[row.project][row.test] = _const(row.result)
+        for row in db.runs() :
+            data.setdefault(row.project, {})
+            ass = ast.literal_eval(open(row.run_ass).read())
+            for key, (result, _) in ass.items() :
+                data[row.project][f"{row.test}_{key}"] = _const(result == "passed")
+            data[row.project][f"{row.test}_build"] = _const(row.build_ret == "0")
+        df = pd.DataFrame.from_dict(data, orient="index")
+        df.to_csv(args.outfile, index=True, index_label="project")
 
 ##
 ## CLI
@@ -140,7 +207,7 @@ class BadassCLI (object) :
 
 parser = argparse.ArgumentParser("badass",
                                  description="(not so) bad assessments")
-parser.add_argument("-o", "--out", default=sys.stdout,
+parser.add_argument("-o", "--output", default=sys.stdout,
                     type=argparse.FileType("w", encoding="utf-8"),
                     metavar="PATH",
                     help="print results to PATH")
@@ -148,9 +215,11 @@ parser.add_argument("-l", "--log", default=sys.stderr,
                     type=argparse.FileType("w", encoding="utf-8"),
                     metavar="PATH",
                     help="print log messages to PATH")
-parser.add_argument("-d", "--db", default="bad.db", metavar="PATH",
+parser.add_argument("--lang", type=str, default="C",
+                    help="programming language for the project")
+parser.add_argument("--db", default="bad.db", metavar="PATH",
                     help="PATH to database for result records (default 'bad.db')")
-parser.add_argument("-r", "--record", default=None, type=str, metavar="PROJECT:TEST",
+parser.add_argument("--record", default=None, type=str, metavar="PROJECT:TEST",
                     help="record result has TEST in PROJECT (two names)")
 parser.add_argument("base", metavar="DIR",
                     help="path of project base directory")
@@ -185,6 +254,34 @@ has = sub.add_parser("has",
 has.add_argument("decl",
                  help="declaration to be searched for (name or signature)")
 
+cparse = sub.add_parser("cparse",
+                        help="parse C code and dump it as XML")
+cparse.add_argument("code", help="C code")
+
+run = sub.add_parser("run",
+                     help="build and execute a project")
+run.add_argument("-t", "--timeout", default=60, type=int,
+                 help="limit of CPU runtime, in seconds (default 60)")
+run.add_argument("--out", default=False, action="store_true",
+                 help="show stdout")
+run.add_argument("--err", default=False, action="store_true",
+                 help="show stderr")
+run.add_argument("--ret", default=False, action="store_true",
+                 help="show return codes")
+run.add_argument("--sys", default=False, action="store_true",
+                 help="show strace")
+run.add_argument("-a", "--add", metavar="FILE",
+                 nargs="+", action="append", default=[],
+                 help="files to add to the project (unless already present)")
+run.add_argument("-r", "--replace", metavar="FILE",
+                 nargs="+", action="append", default=[],
+                 help="files to replace in the project (or add if absent)")
+
+report = sub.add_parser("report",
+                        help="dump database to CSV")
+report.add_argument("outfile", default="badass.csv", type=str, nargs="?",
+                    help="file name to be saved (default 'badass.csv')")
+
 args = parser.parse_args()
-badcli = BadassCLI(args.base, args.out, args.log)
+badcli = BadassCLI(args.base, args.output, args.log, args.lang)
 badcli(args)

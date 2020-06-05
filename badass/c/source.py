@@ -1,15 +1,31 @@
+import subprocess
 from lxml import etree
+import chardet
 
 from clang.cindex import Index, Config, CursorKind
 if not getattr(Config, "library_file", None) :
     Config.set_library_file("/usr/lib/llvm-9/lib/libclang.so")
+
+_cpp_head = ""
+
+def cpp (src, env={}, **var) :
+    _env = dict(env)
+    _env.update(var)
+    src = subprocess.run(["cpp", "-P", "--traditional", "-C"]
+                         + [f"-D{k}={v}" for k, v in _env.items()],
+                         input=src, encoding="utf-8", capture_output=True).stdout
+    return src.replace(_cpp_head, "")
+
+_cpp_head = cpp("")
 
 class Source (object) :
     def __init__ (self, path, source=None) :
         self.p = path
         self.i = Index.create()
         if source is None :
-            self.s = open(path).read().splitlines()
+            data = open(path, "rb").read()
+            enc = chardet.detect(data)
+            self.s = data.decode(enc["encoding"]).splitlines()
             self.t = self.i.parse(path)
         else :
             self.s = source.splitlines()
