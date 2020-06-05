@@ -94,13 +94,19 @@ class AssRunner (object) :
         script.extend(f"cp -f '{p}' ." for p in self.rep)
         script.extend(f"cp -f '{p}' ." for p in self.add
                       if not (proj / p.name).exists())
-        script.extend(["sh prepare.sh >prep.out 2>prep.err",
+        script.extend(["touch run.ass run.sys argv",
+                       "sh prepare.sh >prep.out 2>prep.err",
                        "echo $? > prep.ret",
                        "sh build.sh >build.out 2>build.err",
                        "echo $? > build.ret",
-                       "strace -f -r -o run.sys ./a.out >run.out 2>run.err </dev/null",
+                       "strace -f -r -o run.sys ./a.out $(cat argv) >run.out 2>run.err </dev/null",
                        "echo $? > run.ret",
-                       "touch run.ass run.sys",
+                       "echo '$' >> prep.out",
+                       "echo '$' >> prep.err",
+                       "echo '$' >> build.out",
+                       "echo '$' >> build.err",
+                       "echo '$' >> run.out",
+                       "echo '$' >> run.err",
                        "set -x",
                        "cat prep.ret",
                        "cat prep.out",
@@ -141,8 +147,10 @@ class AssRunner (object) :
                     ret, tag, test = line[2:-2].split(":", 2)
                     log[tag] = (ret, test)
                 run[key] = log
-            elif key.endswith(".out") or key.endswith(".err") or key == "out+err" :
-                run[key] = "\n".join(val)
+            elif key.endswith(".out") or key.endswith(".err") :
+                assert(val[-1].endswith("$"))
+                val[-1] = val[-1][:-1]
+                run[key] = "\n".join(val).rstrip()
             elif key.endswith(".ret") :
                 run[key] = int(val[0].strip())
             elif key.endswith(".sys") :
