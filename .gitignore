@@ -8,7 +8,7 @@ __pycache__
 ,*
 /bad
 /bad.db
-/badass.egg-info
+/*.egg-info
 /build
 /dist
 a.out
