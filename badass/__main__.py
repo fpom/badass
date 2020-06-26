@@ -3,6 +3,7 @@ import lxml.etree
 import pandas as pd
 from colorama import init as colorama_init, Fore, Style
 from .db import DB
+from .p5 import PrePreProcessor
 
 colorama_init()
 
@@ -36,7 +37,8 @@ class BadassCLI (object) :
         self.path = pathlib.Path(path)
         self.out = out
         self.log = log
-        self.mod = importlib.import_module("." + lang.lower(), "badass")
+        self.lang = lang.lower()
+        self.mod = importlib.import_module("." + self.lang, "badass")
         self.src = {}
     def __call__ (self, args) :
         cmd = getattr(self, "do_" + args.command)
@@ -200,6 +202,21 @@ class BadassCLI (object) :
             data[row.project][f"{row.test}_build"] = _const(row.build_ret == "0")
         df = pd.DataFrame.from_dict(data, orient="index")
         df.to_csv(args.outfile, index=True, index_label="project")
+    ##
+    ## p5
+    ##
+    def do_p5 (self, args) :
+        g = dict(a.split("=", 1) for a in args.let)
+        p = PrePreProcessor(*args.input,
+                            comment=args.marker,
+                            include=args.include,
+                            **g)
+        if args.save :
+            p.save(args.save)
+        if args.nocpp :
+            args.output.write(p.ppp)
+        else :
+            args.output.write(p.cpp)
 
 ##
 ## CLI
@@ -210,19 +227,19 @@ parser = argparse.ArgumentParser("badass",
 parser.add_argument("-o", "--output", default=sys.stdout,
                     type=argparse.FileType("w", encoding="utf-8"),
                     metavar="PATH",
-                    help="print results to PATH")
+                    help="print results to PATH (default: stdout)")
 parser.add_argument("-l", "--log", default=sys.stderr,
                     type=argparse.FileType("w", encoding="utf-8"),
                     metavar="PATH",
-                    help="print log messages to PATH")
+                    help="print log messages to PATH (default: stderr)")
 parser.add_argument("--lang", type=str, default="C",
-                    help="programming language for the project")
+                    help="programming language for the project (default: 'C')")
 parser.add_argument("--db", default="bad.db", metavar="PATH",
                     help="PATH to database for result records (default 'bad.db')")
 parser.add_argument("--record", default=None, type=str, metavar="PROJECT:TEST",
-                    help="record result has TEST in PROJECT (two names)")
-parser.add_argument("base", metavar="DIR",
-                    help="path of project base directory")
+                    help="record result as TEST in PROJECT (two arbitrary tags)")
+parser.add_argument("-b", "--base", metavar="DIR", default=".",
+                    help="path of project base directory (default: '.')")
 sub = parser.add_subparsers(dest="command",
                             required=True,
                             title="available commands")
@@ -281,6 +298,23 @@ report = sub.add_parser("report",
                         help="dump database to CSV")
 report.add_argument("outfile", default="badass.csv", type=str, nargs="?",
                     help="file name to be saved (default 'badass.csv')")
+
+ppppp = sub.add_parser("p5",
+                       help="Python-powered pre-pre-processor")
+ppppp.add_argument("-I", metavar="DIR", action="append", default=[], dest="include",
+                   help="add DIR the the set of paths searched for includes")
+ppppp.add_argument("-m", "--marker", default="//", type=str,
+                   help="directives marker (default: '//')")
+ppppp.add_argument("-l", "--let", metavar="NAME=EXPR", default=[], action="append",
+                   type=str, help="define additional names, as with let directive")
+ppppp.add_argument("-s", "--save", metavar="FILE", default=None,
+                   type=argparse.FileType("w", encoding="utf-8"),
+                   help="save ppppped text to FILE")
+ppppp.add_argument("-n", "--nocpp", default=False, action="store_true",
+                   help="output text whithout paassing it to cpp")
+ppppp.add_argument("input", metavar="FILE", nargs="+",
+                   type=argparse.FileType("r", encoding="utf-8"),
+                   help="input FILEs to process")
 
 args = parser.parse_args()
 badcli = BadassCLI(args.base, args.output, args.log, args.lang)
