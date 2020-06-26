@@ -316,6 +316,7 @@ ppppp.add_argument("input", metavar="FILE", nargs="+",
                    type=argparse.FileType("r", encoding="utf-8"),
                    help="input FILEs to process")
 
-args = parser.parse_args()
-badcli = BadassCLI(args.base, args.output, args.log, args.lang)
-badcli(args)
+def main () :
+    args = parser.parse_args()
+    badcli = BadassCLI(args.base, args.output, args.log, args.lang)
+    badcli(args)
