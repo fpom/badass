@@ -53,8 +53,6 @@ _cpp_head = cpp("")
 ##
 
 class String (str) :
-    def c (self) :
-        return '"' + "".join(c if c != '"' else "\\" + c for c in self) + '"'
     def __repr__ (self) :
         r = super().__repr__()
         return f"{self.__class__.__name__}({r})"
@@ -67,6 +65,8 @@ class Block (object) :
         for key, val in more.items() :
             setattr(self, key, val)
         self.out = []
+    def __repr__ (self) :
+        return f"<Block '{self.name}'>"
     def update (self, other, cppenv=True, env=True, out=True) :
         if cppenv :
             self.cppenv.update(other.cppenv)
@@ -105,15 +105,23 @@ class PrePreProcessor (object) :
         self.ppp = ppp.replace("//#//", "")
         self.cpp = self._do_cpp(ppp)
     def save (self, stream=sys.stdout) :
-        for key, val in self.cppenv.items() :
+        for key, val in self.top.cppenv.items() :
             stream.write(f"//let {key} = {val!r}\n")
         stream.write(self.ppp)
     def push (self, *l, **k) :
-        self.stack.append(Block(*l, **k))
+        if self.stack :
+            env = dict(self.top.env)
+            cppenv = dict(self.top.cppenv)
+            env.update(k.pop("env", {}))
+            cppenv.update(k.pop("cppenv", {}))
+        else :
+            env = k.pop("env", {})
+            cppenv = k.pop("cppenv", {})
+        self.stack.append(Block(*l, env=env, cppenv=cppenv, **k))
     def pop (self, name, *expected) :
         block = self.stack.pop(-1)
         exp = "/".join(f"'{e}'" for e in expected)
-        assert block.name in expected, f"unexpected '{name}' (unmatched {exp})"
+        assert block.name in expected, f"unexpected '{name}' ('{block.name}' expected {exp})"
         return block
     @property
     def top (self) :
@@ -124,7 +132,7 @@ class PrePreProcessor (object) :
             if test.exists() :
                 return test
     def _do_ppp (self) :
-        self.push(None, cppenv=self._glet, env=self._let)
+        self.push(None, cppenv=self._glet)
         for name, method in sorted(self._ppp.items()) :
             method()
             assert len(self.stack) == 1, f"unclosed '{self.top.name}'"
@@ -135,6 +143,7 @@ class PrePreProcessor (object) :
         return cpp(txt, self.top.cppenv).replace("//#//", "")
     def _eval (self, expr) :
         env = dict(self.top.env)
+        env.update(self._let)
         env.update(self.top.cppenv)
         return eval(expr, env)
     def _lines (self, accept, reject) :
@@ -170,7 +179,7 @@ class PrePreProcessor (object) :
     def _cmd_let (self, args) :
         self._do_let(args)
     def _1_cmd_let (self, args) :
-        self.names.add(args.split("=", 1)[0].strip())
+        self.names.add(args.split("=", 1)[0].split("(", 1)[0].strip())
         self.top.out.append(f"{self.comment}let {args}")
     def _ppp_1 (self) :
         self._do_let = self._1_cmd_let
@@ -200,20 +209,45 @@ class PrePreProcessor (object) :
     def _cmd_if (self, args, stop=False, name="if") :
         cond = not stop and self._eval(args)
         self.push(name, keep=cond, stop=(cond or stop))
-    def _cmd_iflet (self, args) :
+    def _cmd_if_let (self, args) :
         cond = args in self.cppenv
         self.push("iflet", keep=cond, stop=cond)
-    def _cmd_ifnlet (self, args) :
+    def _cmd_if_not_let (self, args) :
         cond = args not in self.cppenv
         self.push("ifnlet", keep=cond, stop=cond)
-    def _cmd_elif (self, args) :
-        block = self._cmd_end_if(None, name="elif")
-        self._cmd_if(args, stop=block.stop, name="endif")
+    def _cmd_else_if (self, args) :
+        block = self._cmd_end_if(None, name="else if")
+        self._cmd_if(args, stop=block.stop, name="else if")
+    def _cmd_else (self, args) :
+        block = self._cmd_end_if(None, name="else if")
+        self._cmd_if(str(not block.keep), stop=block.stop, name="else")
     def _cmd_end_if (self, args, name="end if") :
-        block = self.pop(name, "if", "iflet", "ifnlet", "elif")
+        block = self.pop(name, "if", "if let", "if not let", "else", "else if")
         if block.keep :
             self.top.update(block)
         return block
+    def _cmd_for (self, args) :
+        _body = []
+        for cmd, line in self._lines({"end for"}, {}) :
+            if cmd is None :
+                _body.append(line)
+            else :
+                break
+        body = "\n".join(_body)
+        names, expr = args.split(" in ", 1)
+        unroll = []
+        for t in self._eval(expr) :
+            env = dict(self.top.env)
+            env.update(self._let)
+            env.update(self.top.cppenv)
+            old = set(env)
+            exec(f"{names} = {t!r}", env)
+            unroll.extend(cpp(body, **{k : v for k, v in env.items()
+                                       if k not in old
+                                       and not k.startswith("_")}).splitlines())
+        self.input.append(iter(unroll))
+    def _cmd_end_for (self, args) :
+        pass
     def _2_cmd_let (self, args) :
         name, expr = args.split("=", 1)
         self.top.cppenv[name.strip()] = self._eval(expr.strip())
@@ -222,7 +256,9 @@ class PrePreProcessor (object) :
         for cmd, args in self._lines({"let",
                                       "letdefault",
                                       "import", "from",
-                                      "if", "iflet", "ifnlet", "elif", "end if"},
+                                      "for", "end for",
+                                      "if", "if let", "if not let",
+                                      "else", "else if", "end if"},
                                      {"skip", "end skip",
                                       "shuffle", "end shuffle"}) :
             if cmd is not None :
@@ -244,13 +280,17 @@ class PrePreProcessor (object) :
         return String(join.join(p))
     def _let_string (self, val) :
         return String(str(val))
-    def _let_randint (self, a, b, len=0, unique=False) :
+    def _let_randint (self, a, b, len=0, unique=False, fmt=("{", ", ", "}")) :
         if len :
             if unique :
                 values = random.sample(range(a, b+1), len)
             else :
                 values = [random.randint(a, b) for i in range(len)]
-            return "{" + ", ".join(str(v) for v in values) + "}"
+            if fmt :
+                l, m, r = fmt
+                return l + m.join(str(v) for v in values) + r
+            else :
+                return values
         else :
             return random.randint(a, b)
     def _let_choice (self, *args) :
