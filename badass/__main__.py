@@ -320,3 +320,6 @@ def main () :
     args = parser.parse_args()
     badcli = BadassCLI(args.base, args.output, args.log, args.lang)
     badcli(args)
+
+if __name__ == "__main__" :
+    main()

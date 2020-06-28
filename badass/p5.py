@@ -52,22 +52,28 @@ _cpp_head = cpp("")
 ## helper classes
 ##
 
-class If (object) :
-    def __init__ (self, txt, cond, stop) :
-        self.txt = txt
-        self.cond = cond
-        self.stop = stop
-    def __str__ (self) :
-        return self.txt
-    def __eq__ (self, other) :
-        return self.txt == str(other)
-
 class String (str) :
     def c (self) :
         return '"' + "".join(c if c != '"' else "\\" + c for c in self) + '"'
     def __repr__ (self) :
         r = super().__repr__()
         return f"{self.__class__.__name__}({r})"
+
+class Block (object) :
+    def __init__ (self, name, cppenv={}, env={}, **more) :
+        self.name = name
+        self.cppenv = dict(cppenv)
+        self.env = dict(env)
+        for key, val in more.items() :
+            setattr(self, key, val)
+        self.out = []
+    def update (self, other, cppenv=True, env=True, out=True) :
+        if cppenv :
+            self.cppenv.update(other.cppenv)
+        if env :
+            self.env.update(other.env)
+        if out :
+            self.out.extend(other.out)
 
 ##
 ## main class
@@ -77,22 +83,19 @@ class PrePreProcessor (object) :
     def __init__ (self, *infiles, comment="//", include=[], **glet) :
         self.input = [open(f) if isinstance(f, str) else iter(f)
                       for f in reversed(infiles)]
-        self.output = [[]]
         self.comment = comment
+        self._glet = glet
         include = list(include)
         if "." not in include :
             include.append(".")
         self.include = [pathlib.Path(p) for p in include]
         self.stack = []
-        self.env = {}
-        self._glet = dict(glet)
         self._cmd = {name[5:].replace("_", " ") : getattr(self, name)
                      for name in dir(self) if name.startswith("_cmd_")}
         self._let = {name[5:] : getattr(self, name)
                      for name in dir(self) if name.startswith("_let_")}
         self._ppp = {name[5:] : getattr(self, name)
                      for name in dir(self) if name.startswith("_ppp_")}
-        self.env.update(self._let)
         _comment = re.escape(comment)
         _cmd = list(self._cmd)
         _cmd.sort(reverse=True, key=len)
@@ -105,22 +108,34 @@ class PrePreProcessor (object) :
         for key, val in self.cppenv.items() :
             stream.write(f"//let {key} = {val!r}\n")
         stream.write(self.ppp)
+    def push (self, *l, **k) :
+        self.stack.append(Block(*l, **k))
+    def pop (self, name, *expected) :
+        block = self.stack.pop(-1)
+        exp = "/".join(f"'{e}'" for e in expected)
+        assert block.name in expected, f"unexpected '{name}' (unmatched {exp})"
+        return block
+    @property
+    def top (self) :
+        return self.stack[-1]
     def _find_file (self, path) :
         for base in self.include :
             test = base / path
             if test.exists() :
                 return test
     def _do_ppp (self) :
+        self.push(None, cppenv=self._glet, env=self._let)
         for name, method in sorted(self._ppp.items()) :
             method()
-            self.input = [iter(l) for l in self.output if l]
-            self.output = [[]]
+            assert len(self.stack) == 1, f"unclosed '{self.top.name}'"
+            self.input = [iter(self.top.out)]
+            self.top.out = []
         return "\n".join(itertools.chain.from_iterable(self.input))
     def _do_cpp (self, txt) :
-        return cpp(txt, self.cppenv).replace("//#//", "")
+        return cpp(txt, self.top.cppenv).replace("//#//", "")
     def _eval (self, expr) :
-        env = self.env.copy()
-        env.update(self.cppenv)
+        env = dict(self.top.env)
+        env.update(self.top.cppenv)
         return eval(expr, env)
     def _lines (self, accept, reject) :
         while self.input :
@@ -139,35 +154,26 @@ class PrePreProcessor (object) :
                     yield None, line
             else :
                 yield None, line
-    def _cmd_let (self, args) :
-        if self.cppenv is None :
-            # first pass
-            self.names.add(args.split("=", 1)[0].strip())
-            self.output[-1].append(f"{self.comment}let {args}")
-        else :
-            # second pass
-            name, expr = args.split("=", 1)
-            self.cppenv[name.strip()] = self._eval(expr.strip())
     def _cmd_include (self, args) :
         self.input.append(open(self._find_file(args)))
     def _cmd_skip (self, args) :
-        self.stack.append("skip")
-        self.output.append([])
+        self.push("skip", keep=False)
     def _cmd_end_skip (self, args) :
-        cmd = self.stack.pop(-1)
-        assert cmd == f"skip", f"unexpected 'end skip' (unmatched '{cmd}')"
-        self.output.pop(-1)
+        block = self.pop("end skip", "skip")
+        self.top.update(block, out=False)
     def _cmd_shuffle (self, args) :
-        self.stack.append("shuffle")
-        self.output.append([])
+        self.push("shuffle")
     def _cmd_end_shuffle (self, args) :
-        cmd = self.stack.pop(-1)
-        assert cmd == f"shuffle", f"unexpected 'end shuffle' (unmatched '{cmd}')"
-        d = self.output.pop(-1)
-        random.shuffle(d)
-        self.output[-1].extend(d)
+        block = self.pop("end shuffle", "shuffle")
+        random.shuffle(block.out)
+        self.top.update(block)
+    def _cmd_let (self, args) :
+        self._do_let(args)
+    def _1_cmd_let (self, args) :
+        self.names.add(args.split("=", 1)[0].strip())
+        self.top.out.append(f"{self.comment}let {args}")
     def _ppp_1 (self) :
-        self.cppenv = None # first pass
+        self._do_let = self._1_cmd_let
         self.names = set()
         for cmd, args in self._lines({"skip", "end skip",
                                       "let",
@@ -181,40 +187,38 @@ class PrePreProcessor (object) :
                     if args.startswith("#include") :
                         self.names.update(cdecl(args))
                     args = "//#//" + args
-                self.output[-1].append(args)
+                self.top.out.append(args)
         for name, wset in words.wlists.items() :
-            self.env[name] = words.cut(wset) - self.names
-        self.cppenv = self._glet # second pass
+            self.top.env[name] = words.cut(wset) - self.names
     def _cmd_letdefault (self, args) :
         name, expr = args.split("=", 1)
-        self.cppenv.setdefault(name.strip(), self._eval(expr.strip()))
+        self.top.cppenv.setdefault(name.strip(), self._eval(expr.strip()))
     def _cmd_import (self, args) :
-        exec(f"import {args}", self.env)
+        exec(f"import {args}", self.top.env)
     def _cmd_from (self, args) :
-        exec(f"from {args}", self.env)
+        exec(f"from {args}", self.top.env)
     def _cmd_if (self, args, stop=False, name="if") :
         cond = not stop and self._eval(args)
-        self.stack.append(If(name, cond, cond or stop))
-        self.output.append([])
+        self.push(name, keep=cond, stop=(cond or stop))
     def _cmd_iflet (self, args) :
         cond = args in self.cppenv
-        self.stack.append(If("iflet", cond, cond))
-        self.output.append([])
+        self.push("iflet", keep=cond, stop=cond)
     def _cmd_ifnlet (self, args) :
         cond = args not in self.cppenv
-        self.stack.append(If("ifnlet", cond, cond))
-        self.output.append([])
+        self.push("ifnlet", keep=cond, stop=cond)
     def _cmd_elif (self, args) :
-        cmd = self._cmd_end_if("", "elif")
-        self._cmd_if(args, stop=cmd.stop, name="endif")
+        block = self._cmd_end_if(None, name="elif")
+        self._cmd_if(args, stop=block.stop, name="endif")
     def _cmd_end_if (self, args, name="end if") :
-        cmd = self.stack.pop(-1)
-        assert isinstance(cmd, If), "unexpected '{name}' (unmatched '{cmd}')"
-        out = self.output.pop(-1)
-        if cmd.cond :
-            self.output[-1].extend(out)
-        return cmd
+        block = self.pop(name, "if", "iflet", "ifnlet", "elif")
+        if block.keep :
+            self.top.update(block)
+        return block
+    def _2_cmd_let (self, args) :
+        name, expr = args.split("=", 1)
+        self.top.cppenv[name.strip()] = self._eval(expr.strip())
     def _ppp_2 (self) :
+        self._do_let = self._2_cmd_let
         for cmd, args in self._lines({"let",
                                       "letdefault",
                                       "import", "from",
@@ -224,10 +228,10 @@ class PrePreProcessor (object) :
             if cmd is not None :
                 cmd(args)
             else :
-                self.output[-1].append(args)
+                self.top.out.append(args)
     def _let_randname (self, wds=None) :
         if wds is None :
-            wds = self.env["english"]
+            wds = self.top.env["english"]
         name = random.choice(list(sorted(wds)))
         wds.discard(name)
         return name
@@ -256,7 +260,7 @@ class PrePreProcessor (object) :
         random.shuffle(l)
         return String("".join(l))
     def _let_islet (self, name) :
-        return name in self.cppenv
+        return name in self.top.cppenv
 
 ##
 ## user helper
