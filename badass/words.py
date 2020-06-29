@@ -65015,10 +65015,52 @@ zoophilia
 
 _offensive = set(_OFFENSIVE.strip().splitlines())
 
+_KEYWORDS = """
+auto
+break
+case
+char
+const
+continue
+default
+do
+double
+else
+enum
+extern
+float
+for
+goto
+if
+inline
+int
+long
+register
+restrict
+return
+short
+signed
+sizeof
+static
+struct
+switch
+typedef
+union
+unsigned
+void
+volatile
+while
+main
+"""
+
+_keywords = set(_KEYWORDS.strip().splitlines())
+
+_drop = _offensive | _keywords
+
 wlists = {}
 
 for name, raw in _RAW.items() :
-    wlists[name] = globals()[name] = set(raw.strip().splitlines()) - _offensive
+    wlists[name] = globals()[name] = set(raw.strip().splitlines()) - _drop
 
 def cut (words, min=3, max=7) :
     return set(w for w in words if min <= len(w) <= max)
