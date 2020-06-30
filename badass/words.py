@@ -1,3 +1,5 @@
+import builtins
+
 _RAW = {"english" : """
 a
 aardvark
@@ -65016,6 +65018,7 @@ zoophilia
 _offensive = set(_OFFENSIVE.strip().splitlines())
 
 _KEYWORDS = """
+# C
 auto
 break
 case
@@ -65051,9 +65054,47 @@ void
 volatile
 while
 main
+# Python
+and
+as
+assert
+async
+await
+break
+class
+continue
+def
+del
+elif
+else
+except
+false
+finally
+for
+from
+global
+if
+import
+in
+is
+lambda
+none
+nonlocal
+not
+or
+pass
+raise
+return
+true
+try
+while
+with
+yield
 """
 
+# '# lines' are kept but will not be a problem
 _keywords = set(_KEYWORDS.strip().splitlines())
+_keywords.update(dir(builtins))
 
 _drop = _offensive | _keywords
 
