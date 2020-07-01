@@ -146,8 +146,12 @@ class BadassCLI (object) :
     ## cparse
     ##
     def do_cparse (self, args) :
+        if args.input :
+            code = args.input.read()
+        else :
+            code = args.code
         self._csrc = getattr(self, "_csrc", 0) + 1
-        src = self._source_load(f".{self._csrc}.c", args.code)
+        src = self._source_load(f".{self._csrc}.c", code)
         xml = lxml.etree.tostring(src.x, pretty_print=True, encoding="utf-8")
         self.out.write(xml.decode("utf-8"))
         self.out.write("\n")
@@ -273,7 +277,10 @@ has.add_argument("decl",
 
 cparse = sub.add_parser("cparse",
                         help="parse C code and dump it as XML")
-cparse.add_argument("code", help="C code")
+cparse.add_argument("-i", "--input", metavar="PATH",
+                    type=argparse.FileType("r", encoding="utf-8"),
+                    help="read code from PATH")
+cparse.add_argument("code", help="C code", default="", nargs="?")
 
 run = sub.add_parser("run",
                      help="build and execute a project")
