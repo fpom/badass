@@ -1,4 +1,4 @@
-import random, itertools, re, subprocess, pathlib, sys
+import random, itertools, re, subprocess, pathlib, sys, os
 from . import words
 
 ##
@@ -7,16 +7,19 @@ from . import words
 
 from clang.cindex import Index, Config, CursorKind
 if not getattr(Config, "library_file", None) :
-    ldconf = subprocess.run(["ldconfig", "-p"],
-                            encoding="utf-8", capture_output=True).stdout
-    _libclang = re.compile(r"^libclang(?:-[0-9.]+)?\.so(?:\.[0-9]+)?\b.*?=>\s+(.*)$")
-    for line in (l.strip() for l in ldconf.splitlines()) :
-        match = _libclang.match(line)
-        if match :
-            Config.set_library_file(match.group(1))
-            break
+    if "BADASS_LIBCLANG" in os.environ :
+        Config.set_library_file(os.environ["BADASS_LIBCLANG"])
     else :
-        raise RuntimeError("could not load libclang")
+        ldconf = subprocess.run(["ldconfig", "-p"],
+                                encoding="utf-8", capture_output=True).stdout
+        _libclang = re.compile(r"^libclang(?:-[0-9.]+)?\.so(?:\.[0-9]+)?\b.*?=>\s+(.*)$")
+        for line in (l.strip() for l in ldconf.splitlines()) :
+            match = _libclang.match(line)
+            if match :
+                Config.set_library_file(match.group(1))
+                break
+        else :
+            raise RuntimeError("could not load libclang")
 
 _decl = set(getattr(CursorKind, c) for c in dir(CursorKind) if "DECL" in c)
 
@@ -56,6 +59,8 @@ class String (str) :
     def __repr__ (self) :
         r = super().__repr__()
         return f"{self.__class__.__name__}({r})"
+    def __str__ (self) :
+        return '"' + "".join(c if c != '"' else "\\" + c for c in self) + '"'
 
 class Block (object) :
     def __init__ (self, name, cppenv={}, env={}, **more) :
@@ -265,6 +270,7 @@ class PrePreProcessor (object) :
                 cmd(args)
             else :
                 self.top.out.append(args)
+    _let_String = String
     def _let_randname (self, wds=None) :
         if wds is None :
             wds = self.top.env["english"]
