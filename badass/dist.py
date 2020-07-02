@@ -17,11 +17,20 @@ class Dist (object) :
         self.size = {}
         self.dist = pd.DataFrame()
     def _c_lzma (self, data) :
-        return len(lzma.compress(data, preset=9))
+        if not data :
+            return 0
+        else :
+            return len(lzma.compress(data, preset=9))
     def _c_bz2 (self, data) :
-        return len(bz2.compress(data, 9))
+        if not data :
+            return 0
+        else :
+            return len(bz2.compress(data, 9))
     def _c_zlib (self, data) :
-        return len(zlib.compress(data, 9))
+        if not data :
+            return 0
+        else :
+            return len(zlib.compress(data, 9))
     def _load (self, path, glob) :
         if not glob :
             glob = ["*"]
@@ -58,6 +67,8 @@ class Dist (object) :
         else :
             d2 = self._load(p2, glob)
             s2 = self.size[k2] = self.c(d2)
+        if not s1 or not s2 :
+            return
         s3 = self.c(d1 + d2)
         self.size[k1,k2] = self.size[k2,k1] = s3
         if k1 not in self.dist.columns :
