@@ -1,5 +1,6 @@
 import pathlib, os
 import lzma, bz2, zlib
+import chardet
 import pandas as pd
 import seaborn as sb
 import matplotlib.pylab as plt
@@ -31,6 +32,10 @@ class Dist (object) :
             return 0
         else :
             return len(zlib.compress(data, 9))
+    def _read (self, path) :
+        raw = path.open("rb").read()
+        enc = chardet.detect(raw)
+        return raw.decode(enc["encoding"] or "ascii", errors="replace")
     def _load (self, path, glob) :
         if not glob :
             glob = ["*"]
@@ -41,10 +46,10 @@ class Dist (object) :
                 for name in filenames :
                     child = pathlib.Path(dirpath) / name
                     if any(child.match(p) for p in glob) :
-                        data.append(child.open("rb").read())
+                        data.append(self._read(child))
         else :
-            data.append(path.open("rb").read())
-        return b"".join(data)
+            data.append(self._read(path))
+        return "".join(data).encode("utf-8", errors="replace")
     def csv (self, out) :
         self.dist.to_csv(out)
     def heatmap (self, path) :
