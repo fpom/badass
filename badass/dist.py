@@ -9,13 +9,13 @@ from warnings import simplefilter
 simplefilter("ignore", ClusterWarning)
 
 class Dist (object) :
-    def __init__ (self, algo="lzma") :
+    def __init__ (self, keys, algo="lzma") :
         try :
             self.c = getattr(self, "_c_" + algo)
         except AttributeError :
             raise ValueError(f"unsupported compression '{algo}'")
         self.size = {}
-        self.dist = pd.DataFrame()
+        self.dist = pd.DataFrame(index=keys, columns=keys)
     def _c_lzma (self, data) :
         if not data :
             return 0
@@ -53,30 +53,22 @@ class Dist (object) :
         plt.setp(cg.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
         cg.savefig(path)
     def add (self, k1, p1, k2, p2, *glob) :
-        assert (k1,k2) not in self.dist
-        assert (k1,k2) not in self.size
+        d1 = self._load(p1, glob)
         if k1 in self.size :
             s1 = self.size[k1]
-            d1 = self._load(p1, glob)
         else :
-            d1 = self._load(p1, glob)
             s1 = self.size[k1] = self.c(d1)
+        if s1 == 0 :
+            self.dist.drop(index=k1, columns=k1, inplace=True, errors="ignore")
+            return
+        d2 = self._load(p2, glob)
         if k2 in self.size :
             s2 = self.size[k2]
-            d2 = self._load(p2, glob)
         else :
-            d2 = self._load(p2, glob)
             s2 = self.size[k2] = self.c(d2)
-        if not s1 or not s2 :
+        if s2 == 0 :
+            self.dist.drop(index=k2, columns=k2, inplace=True, errors="ignore")
             return
         s3 = self.c(d1 + d2)
-        self.size[k1,k2] = self.size[k2,k1] = s3
-        if k1 not in self.dist.columns :
-            self.dist[k1] = None
-            self.dist.loc[k1] = None
-        if k2 not in self.dist.columns :
-            self.dist[k2] = None
-            self.dist.loc[k2] = None
         d = 1 - (s1 + s2 - s3) / max(s1, s2)
-        self.dist.loc[k1,k2] = d
-        self.dist.loc[k2,k1] = d
+        self.dist.loc[k1][k2] = self.dist.loc[k2][k1] = d

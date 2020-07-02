@@ -227,8 +227,8 @@ class BadassCLI (object) :
     ## compare
     ##
     def do_compare (self, args) :
-        dist = Dist()
         projects = list(args.project)
+        dist = Dist([pathlib.Path(p).name for p in projects])
         todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
         for p, q in tqdm.tqdm(todo) :
             kp = pathlib.Path(p).name
