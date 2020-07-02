@@ -1,8 +1,10 @@
 import argparse, pathlib, importlib, sys, functools, ast
 import lxml.etree
+import tqdm
 import pandas as pd
 from colorama import init as colorama_init, Fore, Style
 from .db import DB
+from .dist import Dist
 from .p5 import PrePreProcessor
 
 colorama_init()
@@ -221,6 +223,21 @@ class BadassCLI (object) :
             args.output.write(p.ppp)
         else :
             args.output.write(p.cpp)
+    ##
+    ## compare
+    ##
+    def do_compare (self, args) :
+        dist = Dist()
+        projects = list(args.project)
+        todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
+        for p, q in tqdm.tqdm(todo) :
+            kp = pathlib.Path(p).name
+            kq = pathlib.Path(q).name
+            dist.add(kp, p, kq, q, *args.glob)
+        if args.csv :
+            dist.csv(args.csv)
+        if args.heatmap :
+            dist.heatmap(args.heatmap)
 
 ##
 ## CLI
@@ -322,6 +339,17 @@ ppppp.add_argument("-n", "--nocpp", default=False, action="store_true",
 ppppp.add_argument("input", metavar="FILE", nargs="+",
                    type=argparse.FileType("r", encoding="utf-8"),
                    help="input FILEs to process")
+
+compare = sub.add_parser("compare",
+                         help="compare projects")
+compare.add_argument("-g", "--glob", metavar="GLOB", default=[], action="append",
+                     help="files to include in comparison")
+compare.add_argument("--csv", type=argparse.FileType("w", encoding="utf-8"),
+                     help="save distance matrix to CSV")
+compare.add_argument("--heatmap", metavar="PATH", type=str, default=None,
+                     help="draw a clustered heatmap in PATH")
+compare.add_argument("project", default=[], type=str, nargs="+",
+                     help="project base dir (or single file)")
 
 def main () :
     args = parser.parse_args()

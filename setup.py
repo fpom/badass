@@ -23,6 +23,6 @@ setup(name="not-so-badass",
                    "Operating System :: OS Independent"],
       packages=find_packages(where="."),
       python_requires=">=3.7",
-      install_requires=["lxml", "pandas", "colorama", "clang", "chardet"],
+      install_requires=["lxml", "pandas", "colorama", "clang", "chardet", "seaborn"],
       package_data={},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
