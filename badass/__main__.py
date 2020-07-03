@@ -237,7 +237,7 @@ class BadassCLI (object) :
         if args.csv :
             dist.csv(args.csv)
         if args.heatmap :
-            dist.heatmap(args.heatmap)
+            dist.heatmap(args.heatmap, max_size=args.maxsize, absolute=args.absolute)
 
 ##
 ## CLI
@@ -348,6 +348,10 @@ compare.add_argument("--csv", type=argparse.FileType("w", encoding="utf-8"),
                      help="save distance matrix to CSV")
 compare.add_argument("--heatmap", metavar="PATH", type=str, default=None,
                      help="draw a clustered heatmap in PATH")
+compare.add_argument("--maxsize", metavar="COUNT", type=int, default=0,
+                     help="split heatmap into clusters of at most COUNT projects")
+compare.add_argument("--absolute", default=False, action="store_true",
+                     help="draw heatmap with absolute colors")
 compare.add_argument("project", default=[], type=str, nargs="+",
                      help="project base dir (or single file)")
 

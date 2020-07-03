@@ -5,7 +5,7 @@ import pandas as pd
 import seaborn as sb
 import matplotlib.pylab as plt
 
-from scipy.cluster.hierarchy import ClusterWarning
+from scipy.cluster.hierarchy import ClusterWarning, to_tree
 from warnings import simplefilter
 simplefilter("ignore", ClusterWarning)
 
@@ -17,6 +17,13 @@ class Dist (object) :
             raise ValueError(f"unsupported compression '{algo}'")
         self.size = {}
         self.dist = pd.DataFrame(index=keys, columns=keys)
+    @classmethod
+    def read_csv (cls, path, algo="lzma") :
+        data = pd.read_csv(path, index_col=0)
+        data.index = data.index.astype(str)
+        self = cls([], algo)
+        self.dist = data
+        return self
     def _c_lzma (self, data) :
         if not data :
             return 0
@@ -52,11 +59,42 @@ class Dist (object) :
         return "".join(data).encode("utf-8", errors="replace")
     def csv (self, out) :
         self.dist.to_csv(out)
-    def heatmap (self, path) :
-        cg = sb.clustermap(self.dist.fillna(0), cmap="RdYlBu")
+    def _leaves (self, node) :
+        if node.is_leaf() :
+            return self.dist.index[node.get_id()]
+    def heatmap (self, path, max_size=0, absolute=False) :
+        # draw whole heatmap
+        vmax = 1.0 if absolute else None
+        cg = sb.clustermap(self.dist.fillna(0), cmap="RdYlBu", vmax=vmax)
         plt.setp(cg.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
         plt.setp(cg.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
         cg.savefig(path)
+        plt.close(cg.fig)
+        if not max_size :
+            return
+        # split dendogram into subtrees
+        todo = [to_tree(cg.dendrogram_row.calculated_linkage)]
+        done = []
+        while todo :
+            tree = todo.pop()
+            if tree.get_count() > max_size :
+                todo.extend([tree.left, tree.right])
+            else :
+                done.append(tree)
+        # draw each subtree
+        path = pathlib.Path(path)
+        base = path.parent
+        name = path.with_suffix("").name
+        sufx = path.suffix
+        for num, tree in enumerate(done) :
+            target = str(base / f"{name}-{num}{sufx}")
+            leaves = set(tree.pre_order(self._leaves)) - {None}
+            dist = self.dist[self.dist.index.isin(leaves)][[str(l) for l in leaves]]
+            sub = sb.clustermap(dist.fillna(0), cmap="RdYlBu", vmax=vmax)
+            plt.setp(sub.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
+            plt.setp(sub.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
+            sub.savefig(target)
+            plt.close(sub.fig)
     def add (self, k1, p1, k2, p2, *glob) :
         d1 = self._load(p1, glob)
         if k1 in self.size :
