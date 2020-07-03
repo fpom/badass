@@ -2,9 +2,7 @@ import subprocess
 from lxml import etree
 import chardet
 
-from clang.cindex import Index, Config, CursorKind
-if not getattr(Config, "library_file", None) :
-    Config.set_library_file("/usr/lib/llvm-9/lib/libclang.so")
+from .._clang import Index, CursorKind
 
 _cpp_head = ""
 

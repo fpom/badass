@@ -30,21 +30,38 @@ system executing malicious or badly programmed projects.
 
 ## Current state and future
 
-This is a very early version:
-
- * limited to C projects
- * tests are provided as the `main` function
- * other tests have to be programmed by hand to analyse:
-   * the source code
-   * the `strace` log of the program
- 
+This is a very early version that is (mostly) limited to C projects.
 In the future versions, we may have:
 
  * online submission of projects and report to the students on a given
    set of tests
- * final assessment on extended test
- * copy/paste detection between projects
  * a library of standard tests on source code and `strace` logs
+ * support for other languages
+
+## Installation
+
+To start with, just `pip install not-so-badass`. Then, try to run
+`badass -h`, if you get the help message then, everything should be
+OK.
+
+### Troubleshooting `libclang` issues
+
+You may have problems with `libclang` that does not load properly.
+`badass` tries hard to find the dynamic library but it may fail. In
+such a case, you should set environment variable `BADASS_LIBCLANG` to
+the full path of the `libclang` dynamic library. For instance, on my
+Linux, it's `/usr/lib/x86_64-linux-gnu/libclang-9.so.1`. So I set
+`BADASS_LIBCLANG=/usr/lib/x86_64-linux-gnu/libclang-9.so.1` in my
+`.bashrc` and everything is fine. 
+
+On MacOS, it has been reported that you need to install the _XCode
+Command Line Tools_, and you'll find the dynamic library in a path
+like `/Library/Developer/CommandLineTools/usr/lib/libclang.dylib`.
+
+Setting `BADASS_LIBCLANG` may be required if you need to run `badass`
+within `badass run` (eg, in `prepare.sh` or `build.sh` scripts)
+because in this case, `badass` is locked by `firejail` and cannot find
+`libclang` by itself.
 
 ## Licence
 
