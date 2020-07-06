@@ -64,7 +64,7 @@ class Dist (object) :
             return self.dist.index[node.get_id()]
     def heatmap (self, path, max_size=0, absolute=False) :
         # draw whole heatmap
-        vmax = 1.0 if absolute else None
+        vmax = 1.0 if absolute else self.dist.max().max()
         cg = sb.clustermap(self.dist.fillna(0), cmap="RdYlBu", vmax=vmax)
         plt.setp(cg.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
         plt.setp(cg.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
@@ -90,6 +90,8 @@ class Dist (object) :
             target = str(base / f"{name}-{num}{sufx}")
             leaves = set(tree.pre_order(self._leaves)) - {None}
             dist = self.dist[self.dist.index.isin(leaves)][[str(l) for l in leaves]]
+            if len(dist) <= 1 :
+                continue
             sub = sb.clustermap(dist.fillna(0), cmap="RdYlBu", vmax=vmax)
             plt.setp(sub.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
             plt.setp(sub.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)

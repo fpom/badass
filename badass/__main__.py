@@ -1,4 +1,4 @@
-import argparse, pathlib, importlib, sys, functools, ast
+import argparse, pathlib, importlib, sys, functools, ast, pkg_resources
 import lxml.etree
 import tqdm
 import pandas as pd
@@ -46,7 +46,8 @@ class BadassCLI (object) :
         cmd = getattr(self, "do_" + args.command)
         cmd(args)
     def _source_load (self, path, source=None) :
-        self.log.write(f"{Fore.BLUE}{Style.BRIGHT}load{Style.RESET_ALL} {path}\n")
+        if not pathlib.Path(path).name.startswith(".") :
+            self.log.write(f"{Fore.BLUE}{Style.BRIGHT}load{Style.RESET_ALL} {path}\n")
         path = (self.path / pathlib.Path(".//" + str(path))).relative_to(self.path)
         if path in self.src :
             return self.src[path]
@@ -165,14 +166,20 @@ class BadassCLI (object) :
                  "sys" : Fore.MAGENTA,
                  "ret" : Fore.BLUE,
                  "*"   : Fore.YELLOW}
+    def _badass_h (self, path) :
+        _path = pathlib.Path(path)
+        if _path.name == "badass.h" and not _path.exists() :
+            return pkg_resources.resource_filename("badass.c", "badass.h")
+        else :
+            return path
     @record
     def do_run (self, args) :
         self.log.write(f"{Fore.BLUE}{Style.BRIGHT}run{Style.RESET_ALL} {args.base}\n")
         add, rep = set(), set()
         for a in args.add :
-            add.update(a)
+            add.update(self._badass_h(p) for p in a)
         for a in args.replace :
-            rep.update(a)
+            rep.update(self._badass_h(p) for p in a)
         runner = self.mod.run.AssRunner(add, rep)
         run = runner(args.base, timeout=args.timeout)
         for key, val in run.items() :
@@ -227,13 +234,16 @@ class BadassCLI (object) :
     ## compare
     ##
     def do_compare (self, args) :
-        projects = list(args.project)
-        dist = Dist([pathlib.Path(p).name for p in projects])
-        todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
-        for p, q in tqdm.tqdm(todo) :
-            kp = pathlib.Path(p).name
-            kq = pathlib.Path(q).name
-            dist.add(kp, p, kq, q, *args.glob)
+        if args.load :
+            dist = Dist.read_csv(args.load)
+        else :
+            projects = list(args.project)
+            dist = Dist([pathlib.Path(p).name for p in projects])
+            todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
+            for p, q in tqdm.tqdm(todo) :
+                kp = pathlib.Path(p).name
+                kq = pathlib.Path(q).name
+                dist.add(kp, p, kq, q, *args.glob)
         if args.csv :
             dist.csv(args.csv)
         if args.heatmap :
@@ -352,7 +362,9 @@ compare.add_argument("--maxsize", metavar="COUNT", type=int, default=0,
                      help="split heatmap into clusters of at most COUNT projects")
 compare.add_argument("--absolute", default=False, action="store_true",
                      help="draw heatmap with absolute colors")
-compare.add_argument("project", default=[], type=str, nargs="+",
+compare.add_argument("--load", default=None, action="store", type=str, metavar="CSV",
+                     help="load distance matrix from CSV instead of computing it")
+compare.add_argument("project", default=[], type=str, nargs="*",
                      help="project base dir (or single file)")
 
 def main () :

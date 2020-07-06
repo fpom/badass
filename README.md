@@ -63,6 +63,15 @@ within `badass run` (eg, in `prepare.sh` or `build.sh` scripts)
 because in this case, `badass` is locked by `firejail` and cannot find
 `libclang` by itself.
 
+### I'm using MacOS, it does not work
+
+Send me a bug report, perhaps we can interact and have this problem
+solved. I don't own a Mac so I can't test.
+
+### I'm using Windows, it does not work
+
+Indeed. It will never. (Try with the Windows Subsystem for Linux.)
+
 ## Licence
 
 `badass` (C) 2020, Franck Pommereau <franck.pommereau@univ-evry.fr>
