@@ -2,10 +2,10 @@ import pathlib, os
 import lzma, bz2, zlib
 import chardet
 import pandas as pd
-import seaborn as sb
+import seaborn as sns
 import matplotlib.pylab as plt
 
-from scipy.cluster.hierarchy import ClusterWarning, to_tree
+from scipy.cluster.hierarchy import ClusterWarning, to_tree, linkage
 from warnings import simplefilter
 simplefilter("ignore", ClusterWarning)
 
@@ -62,13 +62,24 @@ class Dist (object) :
     def _leaves (self, node) :
         if node.is_leaf() :
             return self.dist.index[node.get_id()]
-    def heatmap (self, path, max_size=0, absolute=False) :
+    def heatmap (self, path, max_size=0, absolute=False, **args) :
+        kw_lnk = {"optimal_ordering" : True}
+        kw_sns = {"vmax" :1.0 if absolute else self.dist.max().max(),
+                  "cmap" : "RdYlBu"}
+        kw_plt = {}
+        kw = {"lnk" : kw_lnk, "sns" : kw_sns, "plt" : kw_plt}
+        for key, val in args.items() :
+            if key[:3] in kw and key[3:4] == "_" :
+                kw[key[:3]][key[4:]] = val
+            else :
+                raise TypeError(f"unexpected argument {key!r}")
         # draw whole heatmap
-        vmax = 1.0 if absolute else self.dist.max().max()
-        cg = sb.clustermap(self.dist.fillna(0), cmap="RdYlBu", vmax=vmax)
+        data = self.dist.fillna(0)
+        link = linkage(data, **kw_lnk)
+        cg = sns.clustermap(data, row_linkage=link, col_linkage=link, **kw_sns)
         plt.setp(cg.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
         plt.setp(cg.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
-        cg.savefig(path)
+        cg.savefig(path, **kw_plt)
         plt.close(cg.fig)
         if not max_size :
             return
@@ -92,10 +103,10 @@ class Dist (object) :
             dist = self.dist[self.dist.index.isin(leaves)][[str(l) for l in leaves]]
             if len(dist) <= 1 :
                 continue
-            sub = sb.clustermap(dist.fillna(0), cmap="RdYlBu", vmax=vmax)
+            sub = sns.clustermap(dist.fillna(0), **kw_sns)
             plt.setp(sub.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
             plt.setp(sub.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
-            sub.savefig(target)
+            sub.savefig(target, **kw_plt)
             plt.close(sub.fig)
     def add (self, k1, p1, k2, p2, *glob) :
         d1 = self._load(p1, glob)
