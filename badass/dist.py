@@ -63,7 +63,7 @@ class Dist (object) :
         if node.is_leaf() :
             return self.dist.index[node.get_id()]
     def heatmap (self, path, max_size=0, absolute=False, **args) :
-        kw_lnk = {"optimal_ordering" : True}
+        kw_lnk = {}
         kw_sns = {"vmax" :1.0 if absolute else self.dist.max().max(),
                   "cmap" : "RdYlBu"}
         kw_plt = {}
