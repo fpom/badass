@@ -2,12 +2,13 @@ import pathlib, os
 import lzma, bz2, zlib
 import chardet
 import pandas as pd
+import numpy as np
 import seaborn as sns
 import matplotlib.pylab as plt
 
 from scipy.cluster.hierarchy import ClusterWarning, to_tree, linkage
 from warnings import simplefilter
-simplefilter("ignore", ClusterWarning)
+#simplefilter("ignore", ClusterWarning)
 
 class Dist (object) :
     def __init__ (self, keys, algo="lzma") :
@@ -75,7 +76,10 @@ class Dist (object) :
                 raise TypeError(f"unexpected argument {key!r}")
         # draw whole heatmap
         data = self.dist.fillna(0)
-        link = linkage(data, **kw_lnk)
+        # use distance matrix as itself
+        link = linkage(data.values[np.triu_indices(len(self.dist), 1)], **kw_lnk)
+        # use distance matrix as a list of vectore
+        #link = linkage(data, **kw_lnk)
         cg = sns.clustermap(data, row_linkage=link, col_linkage=link, **kw_sns)
         plt.setp(cg.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
         plt.setp(cg.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
