@@ -1,3 +1,8 @@
+/* badass.h */
+
+#ifndef _BADASS_H
+#define _BADASS_H 1
+
 #include <stdio.h>
 
 FILE* __ASSLOG__ = NULL;
@@ -9,3 +14,5 @@ FILE* __ASSLOG__ = NULL;
 #define assfail(key, ...) assprint(0, failed, key, __VA_ARGS__)
 
 #define assess(key, expr) ((expr) ? asspass(#key, #expr) : assfail(#key, #expr))
+
+#endif  /* badass.h */

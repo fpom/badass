@@ -68,8 +68,8 @@ class DB (object) :
         base_dir.mkdir(parents=True)
         cols = [now, project, test]
         for name in ["prep", "build", "run"] :
-            for ext in ["ret", "out", "err", "sys", "ass"] :
-                if name != "run" and ext in ("sys", "ass") :
+            for ext in ["ret", "out", "err", "sys", "ass", "dm"] :
+                if name != "run" and ext in ("sys", "ass", "dm") :
                     continue
                 key = f"{name}.{ext}"
                 val = run.get(key, None)

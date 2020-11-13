@@ -16,6 +16,8 @@ def cpp (src, env={}, **var) :
 
 _cpp_head = cpp("")
 
+## clang-11 -cc1 -ast-dump FILE.c > FILE.json 2>/dev/null
+
 class Source (object) :
     def __init__ (self, path, source=None) :
         self.p = path

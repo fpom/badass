@@ -1,4 +1,4 @@
-import signal
+import signal, re
 from pathlib import Path
 from subprocess import Popen, STDOUT, PIPE
 from tempfile import NamedTemporaryFile
@@ -53,8 +53,10 @@ class STrace (object) :
             pid, time = int(pid), float(time)
             if self.root is None :
                 self.root = pid
+                self.pstree = {}
             if pid not in self.pids :
                 self.pids[pid] = []
+                self.pstree[pid] = []
             if info.startswith("+++") :
                 status = info.split()[3]
                 try :
@@ -82,6 +84,42 @@ class STrace (object) :
                                              name=name.strip(),
                                              params=params.strip(),
                                              ret=ret.strip()))
+                if name == "clone" :
+                    child = int(ret)
+                    self.pstree[pid].append(child)
+                    self.pstree[child] = []
+        return self
+
+_not_freed = re.compile(r"not freed: .*? \((\d+) bytes\) from '(.*?)'")
+
+class DMalloc (object) :
+    def __init__ (self) :
+        self.pids = {}
+        self.leaks = {}
+    def write (self, stream) :
+        stream.write(repr((self.leaks, self.pids)))
+    def _print (self, out) :
+        for pid, events in sorted(self.pids.items()) :
+            out.write(f"> {pid}\n")
+            for info in self.pids[pid] :
+                out.write(f"  {info}\n")
+    @classmethod
+    def read (cls, stream) :
+        self = cls()
+        self.leaks, self.pids = eval(stream.read())
+    @classmethod
+    def parse (cls, lines) :
+        self = cls()
+        for line in lines :
+            pid, info = line.split(": ", 1)
+            pid = int(pid)
+            if pid not in self.pids :
+                self.pids[pid] = []
+            self.pids[pid].append(info)
+            match = _not_freed.search(line)
+            if match :
+                size, loc = match.groups()
+                self.leaks[loc] = int(size) + self.leaks.get(loc, 0)
         return self
 
 class AssRunner (object) :
@@ -97,10 +135,13 @@ class AssRunner (object) :
         script.extend(["touch run.ass run.sys argv",
                        "sh prepare.sh >prep.out 2>prep.err",
                        "echo $? > prep.ret",
-                       "sh build.sh >build.out 2>build.err",
+                       "echo DMALLOC_OPTIONS=debug=0x4f4ed03,log=run.dm.%d > _build.sh",
+                       "echo export DMALLOC_OPTIONS >> _build.sh",
+                       "echo alias gcc='python3 -m badass.c.cc' >> _build.sh",
+                       "cat build.sh >> _build.sh",
+                       "sh _build.sh >build.out 2>build.err",
                        "echo $? > build.ret",
-                       "strace -f -r -o run.sys ./a.out $(cat argv) >run.out 2>run.err </dev/null",
-                       "echo $? > run.ret",
+                       f"badass trace -t {timeout} ./a.out $(cat argv)",
                        "echo '$' >> prep.out",
                        "echo '$' >> prep.err",
                        "echo '$' >> build.out",
@@ -118,6 +159,7 @@ class AssRunner (object) :
                        "cat run.out",
                        "cat run.err",
                        "cat run.ass",
+                       "cat run.dm",
                        "cat run.sys"])
         with NamedTemporaryFile(mode="w", dir=proj, suffix=".sh") as tmp :
             tmp.write("\n".join(script) + "\n")
@@ -153,6 +195,8 @@ class AssRunner (object) :
                 run[key] = "\n".join(val).rstrip()
             elif key.endswith(".ret") :
                 run[key] = int(val[0].strip())
-            elif key.endswith(".sys") :
+            elif key == "run.sys" :
                 run[key] = STrace.parse(val)
+            elif key == "run.dm" :
+                run[key] = DMalloc.parse(val)
         return run

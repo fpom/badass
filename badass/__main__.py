@@ -1,11 +1,10 @@
-import argparse, pathlib, importlib, sys, functools, ast, pkg_resources
+import argparse, pathlib, importlib, sys, functools, ast, time
+import subprocess, signal
+import psutil
 import lxml.etree
 import tqdm
-import pandas as pd
 from colorama import init as colorama_init, Fore, Style
 from .db import DB
-from .dist import Dist
-from .p5 import PrePreProcessor
 
 colorama_init()
 
@@ -33,6 +32,17 @@ def _const (val) :
         return int(val)
     else :
         return val
+
+def killtree (pid) :
+    parent = psutil.Process(pid)
+    children = parent.children(recursive=True)
+    for p in children:
+        p.send_signal(signal.SIGTERM)
+    _, alive = psutil.wait_procs(children)
+    if alive :
+        time.sleep(0.2)
+        for p in alive :
+            p.send_signal(signal.SIGKILL)
 
 class BadassCLI (object) :
     def __init__ (self, path, out, log, lang) :
@@ -167,6 +177,7 @@ class BadassCLI (object) :
                  "ret" : Fore.BLUE,
                  "*"   : Fore.YELLOW}
     def _badass_h (self, path) :
+        import pkg_resources
         _path = pathlib.Path(path)
         if _path.name == "badass.h" and not _path.exists() :
             return pkg_resources.resource_filename("badass.c", "badass.h")
@@ -201,6 +212,7 @@ class BadassCLI (object) :
     ## report
     ##
     def do_report (self, args) :
+        import pandas as pd
         self.log.write(f"{Fore.BLUE}{Style.BRIGHT}save{Style.RESET_ALL} {args.outfile}\n")
         db = DB(args.db)
         data = {}
@@ -219,6 +231,7 @@ class BadassCLI (object) :
     ## p5
     ##
     def do_p5 (self, args) :
+        from .p5 import PrePreProcessor
         g = dict(a.split("=", 1) for a in args.let)
         p = PrePreProcessor(*args.input,
                             comment=args.marker,
@@ -234,6 +247,7 @@ class BadassCLI (object) :
     ## compare
     ##
     def do_compare (self, args) :
+        from .dist import Dist
         if args.load :
             dist = Dist.read_csv(args.load)
         else :
@@ -257,6 +271,31 @@ class BadassCLI (object) :
                 options[key] = val
             dist.heatmap(args.heatmap, max_size=args.maxsize, absolute=args.absolute,
                          **options)
+    def do_trace (self, args) :
+        strace = subprocess.Popen(["strace", "-f", "-r", "-o", "run.sys"] + args.cmd,
+                                  encoding="utf-8",
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        start = time.time()
+        while True :
+            time.sleep(0.1)
+            if strace.poll() is not None :
+                break
+            elif time.time() - start > args.timeout :
+                killtree(strace.pid)
+        with open("run.ret", "w") as out :
+            out.write(f"{strace.returncode}\n")
+        with open("run.out", "w") as out :
+            out.write(strace.stdout.read())
+        with open("run.err", "w") as out :
+            out.write(strace.stderr.read())
+        with open("run.dm", "w") as out :
+            for path in sorted(pathlib.Path(".").glob("run.dm.*"),
+                               key=lambda p: int(p.name.rsplit(".")[-1])) :
+                pid = path.name.rsplit(".")[-1]
+                for line in open(path) :
+                    out.write(f"{pid}:" + line.split(":", 2)[-1])
 
 ##
 ## CLI
@@ -354,7 +393,7 @@ ppppp.add_argument("-s", "--save", metavar="FILE", default=None,
                    type=argparse.FileType("w", encoding="utf-8"),
                    help="save ppppped text to FILE")
 ppppp.add_argument("-n", "--nocpp", default=False, action="store_true",
-                   help="output text whithout paassing it to cpp")
+                   help="output text whithout passing it to cpp")
 ppppp.add_argument("input", metavar="FILE", nargs="+",
                    type=argparse.FileType("r", encoding="utf-8"),
                    help="input FILEs to process")
@@ -377,6 +416,14 @@ compare.add_argument("--load", default=None, action="store", type=str, metavar="
                      help="load distance matrix from CSV instead of computing it")
 compare.add_argument("project", default=[], type=str, nargs="*",
                      help="project base dir (or single file)")
+
+trace = sub.add_parser("trace",
+                       help="run a process and trace it")
+trace.add_argument("-t", "--timeout", default=60, type=int,
+                   help="kill the process after given TIMEOUT")
+trace.add_argument("cmd",
+                   nargs="+",
+                   help="command to be run and traced")
 
 def main () :
     args = parser.parse_args()
