@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Résultat</title>
+    <script src="{{ url_for('static', filename='jquery.min.js') }}"></script>
+    <link type="text/css" href="{{ url_for('static', filename='style.css') }}" rel="stylesheet"/>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  </head>
+  <body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul>
+      {% for category, message in messages %}
+      <li class="alert alert-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    <h1>Traitement en cours, veuillez patienter...</h1>
+    <script>
+      setTimeout(function() {
+          window.location.href = "{{ status_url }}";
+      }, {{ status_wait }});
+    </script>
+  </body>
+</html> 

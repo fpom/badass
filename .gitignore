@@ -6,10 +6,9 @@
 __pycache__
 +*
 ,*
-/bad
-/bad.db
 /*.egg-info
 /build
 /dist
 a.out
-*.sys
+/online/data
+/online/upload/*

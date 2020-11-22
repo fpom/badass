@@ -1,14 +1,22 @@
-from setuptools import setup, find_packages
+import ast
 from os import path
-import badass
+from setuptools import setup, find_packages
 
 here = path.abspath(path.dirname(__file__))
 
 with open(path.join(here, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
+with open(path.join(here, "badass", "__init__.py"), encoding="utf-8") as f :
+    for line in f :
+        if line.startswith("version =") :
+            version = ast.literal_eval(line.split("=")[-1].strip())
+            break
+    else :
+        raise Exception("could not find version")
+
 setup(name="not-so-badass",
-      version=badass.VERSION,
+      version=version,
       description="(not so) bad assessments",
       long_description=long_description,
       long_description_content_type="text/markdown",

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Remettre votre travail</title>
+    <script src="{{ url_for('static', filename='jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='index.js') }}"></script>
+    <link type="text/css" href="{{ url_for('static', filename='style.css') }}" rel="stylesheet"/>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  </head>
+  <body>
+    <h1>Remplissez tous les champs du formulaire ci-dessous pour remettre votre travail.</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul>
+      {% for category, message in messages %}
+      <li class="alert alert-{{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    <form id="form" method=POST enctype=multipart/form-data action="{{ url_for('index') }}">
+      <label for="student">Numéro d'étudiant</label>
+      <input type="text" name="student">
+      <label for="password">Mot de passe</label>
+      <input type="password" name="password">
+      <label for="consent">Je certifie que je suis la personne identifiée ci-dessus et que le travail rendu ci-dessous est le mien</label>
+      <input type="checkbox" name="consent" class="checkbox" unchecked>
+    </form>
+  </body>
+</html> 

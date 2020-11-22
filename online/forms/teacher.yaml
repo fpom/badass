@@ -1,0 +1,83 @@
+- AlgoL1:
+    - title: L1 / Algorithmique en C
+    - form:
+        - select:
+            - multiple: ""
+            - name: exercise
+            - option:
+                - value: Exo1
+                - text: Exercice 1
+            - option:
+                - value: Exo2
+                - text: Exercice 2
+            - option:
+                - value: Exo3
+                - text: Exercice 3
+            - option:
+                - value: Exo4
+                - text: Exercice 4
+            - option:
+                - value: Exo5
+                - text: Exercice 5
+            - option:
+                - value: Exo6
+                - text: Exercice 6
+            - option:
+                - value: Exo7
+                - text: Exercice 7
+            - option:
+                - value: Exo8
+                - text: Exercice 8
+            - option:
+                - value: Exo9
+                - text: Exercice 9
+            - option:
+                - value: Exo10
+                - text: Exercice 10
+            - option:
+                - value: Exo11
+                - text: Exercice 11
+            - option:
+                - value: Exo12
+                - text: Exercice 12
+            - option:
+                - value: Exo13
+                - text: Exercice 13
+    - chose: groupe
+    - L1 DLBI G0:
+        - title: Bio-Info / Groupe 0
+    - L1 DLBI G1:
+        - title: Bio-Info / Groupe 1
+    - L1 DLBI G2:
+        - title: Bio-Info / Groupe 2
+    - L1 DLBI G3:
+        - title: Bio-Info / Groupe 3
+    - L1 DLM G1:
+        - title: Maths / Groupe 1
+    - L1 DLM G2:
+        - title: Maths / Groupe 2
+    - L1 DLM G3:
+        - title: Maths / Groupe 3
+    - L1 DLME:
+        - title: Maths-Eco
+    - L1 DLSDV:
+        - title: SdV
+    - L1 info G1:
+        - title: Info / Groupe 1 
+    - L1 info G2:
+        - title: Info / Groupe 2
+    - L1 info G3:
+        - title: Info / Groupe 3
+    - L1 info G4:
+        - title: Info / Groupe 4
+    - L1 info G5:
+        - title: Info / Groupe 5
+- UnixL2:
+    - title: L2 / Programmation Unix
+    - chose: groupe
+    - G1:
+        - title: Groupe 1
+    - G2:
+        - title: Groupe 2
+    - G3:
+        - title: Groupe 3

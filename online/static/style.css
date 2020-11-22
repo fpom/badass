@@ -1,0 +1,128 @@
+body {
+    margin: 0px;
+    padding: 10px;
+    padding-left: 50px;
+    padding-right: 50px;
+    font-family: sans-serif;
+}
+
+h1 {
+    font-size: large;
+}
+
+form {
+    width: 100%;
+}
+
+form input {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+form input[type=checkbox] {
+    display: block;
+    width: unset;
+    margin: 0px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+}
+
+form select {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+form label {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+ul {
+    padding: 0px;
+}
+
+.alert {
+    display: block;
+    margin: 0px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    padding: 20px;
+    border-style: solid;
+}
+
+.alert-error {
+    border-color: #A00;
+    background-color: #FDD;
+}
+
+.alert-warning {
+    border-color: #D60;
+    background-color: #FFD;
+}
+
+.alert-info {
+    border-color: #0A0;
+    background-color: #DFD;
+}
+
+.result {
+    display: block;
+    margin: 0px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    padding: 10px;
+}
+
+.result-title {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.result-fail {
+    background-color: #FDD;
+}
+
+.result-icon {
+    opacity: .3;
+    position: relative;
+    top: 0px;
+    left: 0px;
+    width: 3em;
+    float: left;
+}
+
+.result .bi {
+    position: relative;
+    top: 0px;
+    left: 0px;
+}
+
+.result-fail .bi {
+    color: #A00;
+}
+
+.result-warn {
+    background-color: #FFD;
+}
+
+.result-warn .bi {
+    color: #D60;
+}
+
+.result-pass {
+    background-color: #DFD;
+}
+
+.result-pass .bi {
+    color: #0A0;
+}
+
+.result-content {
+    margin-left: 3.5em;
+    min-height: 2em;
+}

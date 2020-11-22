@@ -1,0 +1,100 @@
+- AlgoL1:
+    - title: L1 / Algorithmique en C
+    - path: L1/algo
+    - form:
+        - label:
+            - for: source
+            - text: Fichier(s) source(s)
+        - input:
+            - type: file
+            - name: source
+            - multiple: ""
+    - chose: exercice
+    - Exo1:
+        - title: Exercice 1
+        - chose: question
+        - Q1:
+            - title: hello.c du cours
+            - path: exo01-1.bad
+        - Q2:
+            - title: "hello.c sans #include"
+            - path: exo01-2.bad
+        - Q3:
+            - title: helloname.c du cours
+            - path: exo01-3.bad
+        - Q4:
+            - title: helloname.c sans free
+            - path: exo01-4.bad
+    - Exo2:
+        - title: Exercice 2
+        - path: exo02.bad
+    - Exo3:
+        - title: Exercice 3
+        - path: exo03.bad
+    - Exo4:
+        - title: Exercice 4
+        - path: exo04.bad
+    - Exo5:
+        - title: Exercice 5
+        - path: exo05.bad
+    - Exo6:
+        - title: Exercice 6
+        - path: exo06.bad
+    - Exo7:
+        - title: Exercice 7
+        - path: exo07.bad
+    - Exo8:
+        - title: Exercice 8
+        - path: exo08.bad
+    - Exo9:
+        - title: Exercice 9
+        - path: exo09.bad
+    - Exo10:
+        - title: Exercice 10
+        - path: exo10.bad
+    - Exo11:
+        - title: Exercice 11
+        - path: exo11.bad
+    - Exo12:
+        - title: Exercice 12
+        - path: exo12.bad
+    - Exo13:
+        - title: Exercice 13
+        - chose: question
+        - form:
+            - label:
+                - for: FUN
+                - text: Nom de la fonction
+            - input:
+                - name: FUN
+                - type: text
+        - Q1:
+            - title: Question 1
+            - path: exo13-1.bad
+        - Q2:
+            - title: Question 2
+            - path: exo13-2.bad
+        - Q3:
+            - title: Question 3
+            - path: exo13-3.bad
+        - Q4:
+            - title: Question 4
+            - path: exo13-4.bad
+        - Q5:
+            - title: Question 5
+            - path: exo13-5.bad
+- UnixL2:
+    - title: L2 / Programmation Unix
+    - path: L2/Unix
+    - form:
+        - label:
+            - for: source
+            - text: Fichier(s) source
+        - input:
+            - type: file
+            - name: source
+            - multiple: ""
+    - chose: exercice
+    - Exo1:
+        - title: Exercice 1
+        - path: exo01.bad
