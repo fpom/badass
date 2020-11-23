@@ -1,3 +1,4 @@
+import os
 from functools import wraps
 from tempfile import mkstemp, mkdtemp
 from shutil import rmtree
@@ -18,9 +19,12 @@ def chdir (fun) :
 
 @chdir
 def _mk3tmp (tmp) :
-    return (Path(mkstemp(dir=tmp)[1]).relative_to(_cwd),
-            Path(mkstemp(dir=tmp)[1]).relative_to(_cwd),
-            Path(mkstemp(dir=tmp)[1]).relative_to(_cwd))
+    trio = []
+    for i in range(3) :
+        fd, path = mkstemp(dir=tmp)
+        os.close(fd)
+        trio.append(Path(path).relative_to(_cwd))
+    return tuple(trio)
 
 @chdir
 def build (source, script) :
@@ -73,6 +77,7 @@ def run (trace, script, stdio=False, memchk=True) :
         trace["log"].append(["running", "a.out", "a.out < /dev/null", out, err, ret])
         trace["get"].extend([out, err, ret])
     else :
+        trace["get"].extend([out, err, ret])
         script.write(f"{drmem}a.out\n"
                      f"echo $? > {ret}")
 
