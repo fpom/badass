@@ -1,4 +1,5 @@
-import subprocess, csv, hashlib, pathlib, sys, getpass
+import subprocess, csv, pathlib, sys, getpass
+from app import salthash
 
 def pwgen () :
     while True :
@@ -10,10 +11,6 @@ def pwgen () :
 def salt (n=2) :
     for p in pwgen() :
         yield p[:n]
-
-def salthash (s, p) :
-    salted = (s + p).encode("utf-8")
-    return hashlib.sha512(salted).hexdigest()
 
 def mkpass (path, users=None, ask=False, default=None, log=sys.stdout) :
     lines = []

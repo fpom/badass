@@ -1,5 +1,5 @@
 ##
-##
+## users management
 ##
 
 import hashlib, collections, time, pathlib, csv
@@ -50,7 +50,7 @@ students = UserDB("data/students.csv")
 teachers = UserDB("data/teachers.csv")
 
 ##
-##
+## flask app starts here
 ##
 
 from flask import Flask, abort, current_app, request, url_for, render_template, flash, redirect, session
@@ -65,10 +65,10 @@ app = Flask("badass-online")
 app.secret_key = open("data/secret_key", "rb").read()
 
 ##
-##
+## asynchronous API for long running tasks
 ##
 
-# see https://stackoverflow.com/questions/31866796/making-an-asynchronous-task-in-flask
+# inspired from https://stackoverflow.com/questions/31866796/making-an-asynchronous-task-in-flask
 
 tasks = {}
 

@@ -5,8 +5,7 @@ static/%.js: forms/%.yaml
 	python genform.py -o $@ $<
 
 clean:
-	rm $$(find . -type f -name "*~")
-	rm -rf $$(find . -type d -name __pycache__)
+	rm -rf $$(find . -type f -name "*~") $$(find . -type d -name __pycache__)
 
 distclean: clean
 	rm -rf upload/*
