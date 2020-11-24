@@ -56,105 +56,105 @@ function on_Course_AlgoL1_Exo1 () {
 function mk_Course_AlgoL1_Exo1_Q1 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo01-1.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo1_Q2 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo01-2.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo1_Q3 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo01-3.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo1_Q4 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo01-4.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo2 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo02.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo3 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo03.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo4 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo04.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo5 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo05.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo6 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo06.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo7 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo07.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo8 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo08.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo9 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo09.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo10 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo10.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo11 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo11.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
 function mk_Course_AlgoL1_Exo12 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo12.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<input type='submit' value='Envoyer'>");
 }
 
@@ -178,7 +178,7 @@ function on_Course_AlgoL1_Exo13 () {
 function mk_Course_AlgoL1_Exo13_Q1 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo13-1.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<label for='FUN'>Nom de la fonction</label>",
     "<input name='FUN' type='text'>",
     "<input type='submit' value='Envoyer'>");
@@ -187,7 +187,7 @@ function mk_Course_AlgoL1_Exo13_Q1 () {
 function mk_Course_AlgoL1_Exo13_Q2 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo13-2.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<label for='FUN'>Nom de la fonction</label>",
     "<input name='FUN' type='text'>",
     "<input type='submit' value='Envoyer'>");
@@ -196,7 +196,7 @@ function mk_Course_AlgoL1_Exo13_Q2 () {
 function mk_Course_AlgoL1_Exo13_Q3 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo13-3.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<label for='FUN'>Nom de la fonction</label>",
     "<input name='FUN' type='text'>",
     "<input type='submit' value='Envoyer'>");
@@ -205,7 +205,7 @@ function mk_Course_AlgoL1_Exo13_Q3 () {
 function mk_Course_AlgoL1_Exo13_Q4 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo13-4.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<label for='FUN'>Nom de la fonction</label>",
     "<input name='FUN' type='text'>",
     "<input type='submit' value='Envoyer'>");
@@ -214,7 +214,7 @@ function mk_Course_AlgoL1_Exo13_Q4 () {
 function mk_Course_AlgoL1_Exo13_Q5 () {
   $("#form").append("<input type='hidden' name='path' value='L1/algo/exo13-5.bad'>",
     "<label for='source'>Fichier(s) source(s)</label>",
-    "<input type='file' name='source' multiple=''>",
+    "<input type='file' name='source' multiple='' accept='.c,.h'>",
     "<label for='FUN'>Nom de la fonction</label>",
     "<input name='FUN' type='text'>",
     "<input type='submit' value='Envoyer'>");

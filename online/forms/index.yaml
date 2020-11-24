@@ -9,6 +9,7 @@
             - type: file
             - name: source
             - multiple: ""
+            - accept: ".c,.h"
     - chose: exercice
     - Exo1:
         - title: Exercice 1

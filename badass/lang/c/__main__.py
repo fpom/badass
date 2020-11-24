@@ -1,7 +1,7 @@
-import argparse, subprocess, tempfile, os
+import argparse, subprocess, tempfile, os, pprint
 from pathlib import Path
 import colorama
-from . import build, run, clear
+from . import build, run, report, clear
 
 colorama.init()
 CF = colorama.Fore
@@ -14,10 +14,17 @@ parser.add_argument("-c", "--chdir", default=".", type=str,
                     help="change work directory before to proceed")
 parser.add_argument("-l", "--logs", default=False, action="store_true",
                     help="show build logs")
+parser.add_argument("-t", "--trace", default=False, action="store_true",
+                    help="show raw build/run trace")
 parser.add_argument("-r", "--run", default=False, action="store_true",
                     help="run built program")
 parser.add_argument("-k", "--keep", default=False, action="store_true",
                     help="keep temporary files")
+parser.add_argument("-m", "--memchk", default=False, action="store_true",
+                    help="check memory safety")
+parser.add_argument("-w", "--write-report", dest="report",
+                    default=None, action="store", type=str,
+                    help="write report to file")
 parser.add_argument("source", nargs="+", type=str,
                     help="source files to compile")
 
@@ -33,10 +40,11 @@ else :
 
 trace = build(source, script)
 if args.run :
-    run(trace, script, stdio=True)
+    run(trace, script, stdout=False, stderr=False, memchk=args.memchk)
 script.flush()
 
 subprocess.call(["bash", script.name])
+report(trace, args.report)
 
 if args.logs :
     for action, path, cmd, out, err, ret in trace["log"] :
@@ -53,6 +61,11 @@ if args.logs :
         err = err.read_text(encoding="utf-8").rstrip()
         if err :
             print(f"{CF.RED}{CS.DIM}{err}{CS.RESET_ALL}")
+
+if args.trace :
+    print(f"{CF.BLUE}{CS.BRIGHT}raw trace:{CS.RESET_ALL}")
+    pprint.pprint(trace)
+    print(f"{CF.BLUE}{CS.BRIGHT}(end of raw trace){CS.RESET_ALL}")
 
 if not args.keep :
     errors = clear(trace)
