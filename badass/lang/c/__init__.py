@@ -8,6 +8,9 @@ from hadlib import getopt
 
 from .drmem import parse as drparse
 
+NAMES = ["C", "C11"]
+DESCRIPTION = "C11 (ISO/IEC 9899:2011)"
+
 _cwd = None
 
 def chdir (fun) :
@@ -20,13 +23,16 @@ def chdir (fun) :
     return wrapper
 
 @chdir
-def _mk3tmp (tmp) :
+def _mktmp (tmp, n=3) :
     trio = []
-    for i in range(3) :
+    for i in range(n) :
         fd, path = mkstemp(dir=tmp)
         os.close(fd)
         trio.append(Path(path).relative_to(_cwd))
-    return tuple(trio)
+    if n == 1 :
+        return trio[0]
+    else :
+        return tuple(trio)
 
 @chdir
 def build (source, script) :
@@ -44,7 +50,7 @@ def build (source, script) :
         if not path.match("*.c") :
             continue
         trace["src"].append(path)
-        out, err, ret = _mk3tmp(tmp)
+        out, err, ret = _mktmp(tmp)
         trace["get"].extend([out, err, ret])
         cf, lf = getopt([path], "linux", "gcc")
         lflags.update(lf)
@@ -57,7 +63,7 @@ def build (source, script) :
             f"rm -f {trace['obj'][-1]}\n"
             f"{gcc} > {out} 2> {err}\n"
             f"echo $? > {ret}\n")
-    out, err, ret = _mk3tmp(tmp)
+    out, err, ret = _mktmp(tmp)
     trace["get"].extend([out, err, ret])
     gcc = " ".join(["gcc",
                     " ".join(f"{quote(str(o))}" for o in trace['obj']),
@@ -77,7 +83,7 @@ def run (trace, script, stdout=True, stderr=True, memchk=True) :
         trace["get"].append(mem)
     else :
         drmem = ""
-    out, err, ret = _mk3tmp(tmp)
+    out, err, ret = _mktmp(tmp)
     if stdout :
         stdout = ""
         trace["out"] = out
