@@ -215,6 +215,9 @@ class ScriptRunner (object) :
                     self.script.back()
                     break
             out.write("chk.exit()\n")
+    _expect_names = {"stdin" : "sent",
+                     "stdout" : "read",
+                     "stderr" : "dialog"}
     def do_end (self) :
         priv = self.test_dir.relative_to(pathlib.Path().absolute())
         argv = ["firejail", "--quiet", f"--private={priv}", "--allow-debuggers"]
@@ -233,5 +236,11 @@ class ScriptRunner (object) :
                                  compression=zipfile.ZIP_LZMA,
                                  compresslevel=9) as zf :
                 self.lang.report(zf)
-                zf.write(self.test_sh, "test.sh")
+                zf.write(self.test_sh, "scripts/test.sh")
+                if self.expect_py is not None :
+                    zf.write(self.expect_py, "scripts/iocheck.py")
                 zf.writestr("tests.json", json.dumps(self.report))
+                for name, path in (self.expect_io or {}).items() :
+                    name = self._expect_names.get(name, None)
+                    if name is not None :
+                        zf.write(path, f"logs/run/{name}.log")

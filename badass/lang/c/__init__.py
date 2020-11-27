@@ -104,16 +104,15 @@ class Language (BaseLanguage) :
         if archive is not None :
             for path in self.src :
                 archive.write(path, Path("src") / self[path])
+            logs = Path("logs")
             for action, path, _, stdio in self.log :
                 for key, src in stdio.items() :
-                    if key.startswith("std") :
-                        archive.write(src, Path(action) / path / f"{key}.log")
+                    archive.write(src, logs / action / path / f"{key}.log")
             if self.mem is not None :
-                memchk = Path("memchk")
-                archive.write(self.mem, memchk)
+                memchk = Path("logs/memchk")
                 for path in self.mem.glob("DrMemory-*/*") :
                     archive.write(path, memchk / path.relative_to(self.mem))
                 archive.writestr("memchk.json", json.dumps(self.memchk))
-            archive.writestr("build-run.json", json.dumps(report))
+            archive.writestr("build.json", json.dumps(report))
     def prepare (self, code, out, source) :
         raise NotImplementedError()
