@@ -1,14 +1,14 @@
 import shlex, re
 from ... import tree
 
-_err = re.compile(r"^Error \#(\d+):\s+(.*)$")
+_err = re.compile(r"^Error\s+\#(\d+):\s+(.*)$")
 _sum = re.compile(r"^\s+(\d+)\s+unique,\s+(\d+)\s+total,?\s+(.*)$")
 _ptr = re.compile(r"0x[0-9A-F]+-0x[0-9A-F]+\s*", re.I)
 _key = re.compile(r"^([A-Z\s]+)")
 _frm = re.compile(fr"^\#\s*\d+\s+(\S+)\s+\[([^:]+):(\d+)\]")
 
 def parse (path) :
-    res = tree(errors={})
+    res = tree(errors=tree())
     with open(path) as log :
         for line in log :
             if line.startswith("Dr. Memory version") :
@@ -17,11 +17,14 @@ def parse (path) :
                 parts = shlex.split(line)
                 pid = res.pid = int(parts[5].rstrip(":"))
                 res.cmd = parts[-1]
-                with open(path.parent / f"global.{pid}.log") as pidlog :
-                    for l in pidlog :
-                        if l.startswith(f"process={pid},") :
-                            res.parent = int(l.strip().rsplit("=")[-1])
-                            break
+                try :
+                    with open(path.parent / f"global.{pid}.log") as pidlog :
+                        for l in pidlog :
+                            if l.startswith(f"process={pid},") :
+                                res.parent = int(l.strip().rsplit("=")[-1])
+                                break
+                except :
+                    pass
             elif line.strip() == "DUPLICATE ERROR COUNTS:" :
                 for line in log :
                     if line.strip().startswith("Error #") :
@@ -41,7 +44,8 @@ def parse (path) :
             else :
                 match = _err.match(line)
                 if match :
-                    err = res.errors[int(match.group(1))] = tree()
+                    num = int(match.group(1))
+                    err = res.errors[num] = tree()
                     desc = err.description = _ptr.sub("", match.group(2).strip())
                     match = _key.match(desc)
                     if match :

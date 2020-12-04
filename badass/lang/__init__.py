@@ -1,27 +1,19 @@
-import importlib, pathlib, tempfile, os
+import importlib, pathlib
 
 class BaseLanguage (object) :
-    def __init__ (self, test_dir) :
-        self.test_dir = test_dir
-        self.tmp = pathlib.Path(tempfile.mkdtemp(dir=self.test_dir))
-    def __getitem__ (self, path) :
-        return path.relative_to(self.test_dir)
-    def _mkdtemp (self, **args) :
-        args["dir"] = self.tmp
-        return pathlib.Path(tempfile.mkdtemp(**args))
-    def _mkstemp (self, **args) :
-        args["dir"] = self.tmp
-        fd, path = tempfile.mkstemp(**args)
-        os.close(fd)
-        return pathlib.Path(path)
-    def _mktmp (self, head, *ext) :
-        if not ext :
-            ext = (".out", ".err", ".ret")
-        names = [self._mkstemp(prefix=f"{head}-", suffix=f"{e}") for e in ext]
-        if len(names) == 1 :
-            return names[0]
-        else :
-            return tuple(names)
+    SUFFIX = None
+    def __init__ (self, test) :
+        self.test = test
+    def add_source (self, source, path) :
+        raise NotImplementedError
+    def del_source (self, name) :
+        raise NotImplementedError
+    def make_script (self) :
+        raise NotImplementedError
+    def report (self) :
+        raise NotImplementedError
+    def decl (self, signature) :
+        raise NotImplementedError
 
 def load (lang) :
     name = lang.strip().lower()

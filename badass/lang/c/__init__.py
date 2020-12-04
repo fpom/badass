@@ -1,118 +1,117 @@
-import json, datetime
+import io
+
 from shlex import quote
-from pathlib import Path
 from hadlib import getopt
 
 from .. import BaseLanguage
-from ... import tree
+from ... import tree, encoding, cached_property, mdesc
+from ...run import PASS, WARN, FAIL
 from .drmem import parse as drparse
+from .srcio import Source
 
 class Language (BaseLanguage) :
     SUFFIX = ".c"
     NAMES = ["C", "C11"]
     DESCRIPTION = "C11 (ISO/IEC 9899:2011)"
-    def build (self, script, source) :
+    MACROS = {"LoopStmt" : ("ForStmt", "WhileStmt", "DoStmt"),
+              "CondStmt" : ("IfStmt", "SwitchStmt")}
+    def __init__ (self, test) :
+        super().__init__(test)
         self.log = []
-        self.obj = []
-        self.src = []
-        now = datetime.datetime.now()
-        self.date = now.strftime("%Y-%m-%d")
-        self.time = now.strftime("%H:%M:%S.%f")
-        # compile sources
-        lflags = set()
-        for path in source :
-            self.src.append(path)
-            if not path.match("*.c") :
-                continue
-            out, err, ret = self._mktmp(path.name)
-            cf, lf = getopt([path], "linux", "gcc")
-            lflags.update(lf)
-            self.obj.append(path.with_suffix(".o"))
-            gcc = (f"gcc -c"
-                   f" -g -fno-inline -fno-omit-frame-pointer -Wall -std=c11 -Wpedantic"
-                   f" {' '.join(cf)} {quote(str(self[path]))} -o {self[self.obj[-1]]}")
-            self.log.append(["compile", self[path], gcc,
+        self.mem = self.test.log_dir / "memchk"
+        self.mem.mkdir(parents=True, exist_ok=True)
+    @cached_property
+    def source (self) :
+        return Source(self.test.test_dir, self.test.source_files)
+    def add_source (self, source, path) :
+        self.source.add(source, path)
+    def del_source (self, name) :
+        self.source.discard(name)
+    def decl (self, signature) :
+        return self.source.decl(signature)
+    def __getitem__ (self, path) :
+        try :
+            path = path.relative_to(self.test.test_dir)
+        except :
+            pass
+        return quote(str(path))
+    def make_script (self, path) :
+        with path.open("w", **encoding) as script :
+            self.pid = self.test.add_path(name=f"make.pid", log="build")
+            script.write(f"echo $$ > {self[self.pid]}\n")
+            # compile sources
+            lflags = set()
+            obj_files = []
+            for path in self.source  :
+                if not path.match("*.c") :
+                    continue
+                base = "-".join(path.parts)
+                out = self.test.add_path(name=f"{base}.stdout", log="build")
+                err = self.test.add_path(name=f"{base}.stderr", log="build")
+                ret = self.test.add_path(name=f"{base}.status", log="build")
+                obj = path.with_suffix(".o")
+                obj_files.append(obj)
+                cf, lf = getopt([self.test.test_dir / path], "linux", "gcc")
+                lflags.update(lf)
+                gcc = (f"gcc -c"
+                       f" -g -fno-inline -fno-omit-frame-pointer -std=c11"
+                       f" -Wall -Wpedantic"
+                       f" {' '.join(cf)} {self[path]} -o {self[obj]}")
+                script.write(f"rm -f {self[obj]}\n"
+                             f"{gcc} > {self[out]} 2> {self[err]}\n"
+                             f"echo $? > {self[ret]}\n")
+                self.log.append(["compile", self[path], gcc,
+                                 tree(stdout=out, stderr=err, exit_code=ret)])
+            # link executable
+            out = self.test.add_path(name=f"link.stdout", log="build")
+            err = self.test.add_path(name=f"link.stderr", log="build")
+            ret = self.test.add_path(name=f"link.status", log="build")
+            obj = " ".join(self[o] for o in obj_files)
+            gcc = f"gcc {' '.join(lflags)} {obj}"
+            script.write(f"rm -f a.out\n"
+                         f"{gcc} > {self[out]} 2> {self[err]}\n"
+                         f"echo $? > {self[ret]}\n")
+            self.log.append(["link", "a.out", gcc,
                              tree(stdout=out, stderr=err, exit_code=ret)])
-            script.write(
-                f"rm -f {self[self.obj[-1]]}\n"
-                f"{gcc} > {self[out]} 2> {self[err]}\n"
-                f"echo $? > {self[ret]}\n")
-        # link objects
-        out, err, ret = self._mktmp("a.out")
-        gcc = " ".join(["gcc",
-                        " ".join(f"{quote(str(self[o]))}" for o in self.obj),
-                        " ".join(lflags)])
-        self.log.append(["link", Path("a.out"), gcc,
-                         tree(stdout=out, stderr=err, exit_code=ret)])
-        script.write(f"rm -f a.out\n"
-                     f"{gcc} > {self[out]} 2> {self[err]}\n"
-                     f"echo $? > {self[ret]}\n")
-    def run (self, script, stdio=None, memchk=True) :
-        if memchk :
-            self.mem = self._mkdtemp(prefix="mem-")
+            # run program
             drmem = (f"drmemory -quiet -logdir {self[self.mem]}"
                      " -callstack_srcfile_prefix $(pwd) --")
-        else :
-            self.mem = None
-            drmem = ""
-        out, err, ret = self._mktmp("run")
-        if stdio is not None :
-            in_ = self._mktmp("run", ".in")
-            ioprog = f"{stdio} --stdout={self[out]} --stdin={self[in_]}"
-            stdin = ""
-            stdout = ""
-        else :
-            self.log.append(["run", Path("a.out"), "a.out",
-                             tree(stdout=out, stderr=err, exit_code=ret)])
-            ioprog = ""
-            stdin = "< /dev/null"
-            stdout = f"> {self[out]}"
-        script.write(f"{ioprog} {drmem} ./a.out {stdout} 2> {self[err]} {stdin}\n"
-                     f"echo $? > {self[ret]}\n")
-        if stdio is not None :
-            return tree(stdin=in_, stdout=out, stderr=err, exit_code=ret)
-    def report (self, archive=None) :
-        report = tree(date=self.date,
-                      time=self.time,
-                      events=[])
+            err = self.test.add_path(name=f"run.stderr", log="run")
+            ret = self.test.add_path(name=f"run.status", log="run")
+            script.write(f"{drmem} ./a.out 2> {self[err]}\n"
+                         f"echo $? > {self[ret]}\n"
+                         f"exit 0")
+    def report_build (self) :
         for action, path, cmd, stdio in self.log :
             retcode = stdio.exit_code.read_text(encoding="utf-8").strip()
-            details = [f"`$ {cmd}` (returned {retcode})"]
+            details = io.StringIO()
+            details.write(f"`$ {cmd}`\\\n(returned {retcode})")
             output = False
-            for key, src in stdio.items() :
-                if key.startswith("std") :
-                    txt = src.read_text(encoding="utf-8").rstrip()
-                    if txt :
-                        details.append(f"\n\n**{key}:**\n\n```\n{txt}\n```")
-                        if key != "stdin" :
-                            output = True
+            for key in ("stdout", "stderr") :
+                txt = stdio[key].read_text(**encoding).rstrip()
+                if txt :
+                    details.write(f"\n\n**{key}:**\n\n```\n{txt}\n```")
+                    output = True
             if retcode != "0" :
-                stat = "fail"
+                stat = FAIL
             elif action in ("compile", "link") and output :
-                stat = "warn"
+                stat = WARN
             else :
-                stat = "pass"
-            report.events.append(tree(title=action,
-                                      text=f"`{path}`",
-                                      details="".join(details),
-                                      status=stat))
-        if self.mem is not None :
-            self.memchk = tree()
-            for path in self.mem.glob("DrMemory*/results.txt") :
-                res = drparse(path)
-                self.memchk[res.pid] = res
-        if archive is not None :
-            for path in self.src :
-                archive.write(path, Path("src") / self[path])
-            logs = Path("logs")
-            for action, path, _, stdio in self.log :
-                for key, src in stdio.items() :
-                    archive.write(src, logs / action / path / f"{key}.log")
-            if self.mem is not None :
-                memchk = Path("logs/memchk")
-                for path in self.mem.glob("DrMemory-*/*") :
-                    archive.write(path, memchk / path.relative_to(self.mem))
-                archive.writestr("memchk.json", json.dumps(self.memchk))
-            archive.writestr("build.json", json.dumps(report))
-    def prepare (self, code, out, source) :
-        raise NotImplementedError()
+                stat = PASS
+                details = io.StringIO()
+            yield stat, action, f"`{path}`", details.getvalue()
+    def report_memchk (self) :
+        memchk = {}
+        for path in self.mem.glob("DrMemory*/results.txt") :
+            res = drparse(path)
+            memchk[res.pid] = res
+        make_pid = int(self.pid.read_text(**encoding))
+        for pid, res in sorted(memchk.items()) :
+            for num, info in sorted(res.errors.items()) :
+                details = io.StringIO()
+                details.write(f"{mdesc(info.description)}<br>\n"
+                              f"process {pid} (child of {make_pid}), call stack:\n\n")
+                for n, frame in enumerate(info.stack) :
+                    details.write(f" {n+1}. function `{frame.function}`"
+                                  f" (file `{frame.path}`, line `{frame.line}`)\n")
+                yield WARN, "warning", info.name.lower(), details.getvalue()

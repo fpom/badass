@@ -1,6 +1,8 @@
 import argparse, pathlib, importlib, sys
 import badass
 
+from . import tree
+
 class ListLangages (argparse.Action) :
     def __call__ (self, parser, namespace, values, option_string=None) :
         from badass.lang import supported
@@ -39,6 +41,7 @@ def main (argv=None) :
         mod.add_arguments(sub)
         handlers[package] = mod.main
     args = parser.parse_args(argv)
+    args = tree((key, getattr(args, key)) for key in dir(args) if not key.startswith("_"))
     sys.exit(handlers[args.command](args))
 
 if __name__ == "__main__" :

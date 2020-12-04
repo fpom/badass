@@ -1,246 +1,314 @@
-import pathlib, itertools, shutil, shlex, tempfile, os, subprocess, zipfile, json, inspect
-import sys, pexpect, time
-from ast import literal_eval
-from datetime import timedelta
+import json
+
+from pathlib import Path
+from shutil import copytree, rmtree
+from time import sleep
+from zipfile import ZipFile, ZIP_LZMA
+
 from ..lang import load as load_lang
-from .. import tree
+from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc
+from .queries import query, expand
+from .report import Report
 
-class ScriptError (Exception) :
-    pass
+import pexpect
+from pexpect.exceptions import EOF, TIMEOUT
 
-class Line (str) :
-    def __new__ (cls, path, num, text, raw) :
-        return super().__new__(cls, text)
-    def __init__ (self, path, num, text, raw) :
-        self.path = path
-        self.num = num
-        self.raw = raw
-    @property
-    def eof (self) :
-        return self.raw is None
-    @property
-    def pos (self) :
-        return f"{self.path}:{self.num}"
+##
+##
+##
 
-class ScriptSource (object) :
-    def __init__ (self, script) :
-        self.path = script.name
-        self.lines = tuple(Line(self.path, n+1, l.rstrip(), l)
-                           for n, l in enumerate(script))
-        self.lno = -1
-        self.EOF = Line(self.path, len(self.lines)+1, None, None)
-    def back (self, n=1) :
-        self.lno = max(-1, self.lno - n)
-    @property
-    def last (self) :
-        try :
-            return self.lines[self.lno]
-        except :
-            pass
-    def __iter__ (self) :
-        stop = len(self.lines) - 1
-        while self.lno < stop :
-            self.lno += 1
-            yield self.lines[self.lno]
-        while True :
-            yield self.EOF
+CONFIG = tree()
 
-def literal (text) :
-    try :
-        return literal_eval(text)
-    except :
-        return text
+##
+##
+##
 
-class IOChecker (object) :
-    def __init__ (self, arguments=sys.argv[1:], timeout=1) :
-        self.timeout = timeout
-        stdout = stdin = None
-        argv = []
-        for pos, arg in enumerate(arguments) :
-            if arg.startswith("--stdout=") :
-                stdout = arg.split("=", 1)[1]
-            elif arg.startswith("--stdin=") :
-                stdin = arg.split("=", 1)[1]
-            else :
-                argv.extend(arguments[pos:])
-                break
-        self.child = pexpect.spawn(argv[0], argv[1:],
-                                   timeout=timeout,
-                                   encoding="utf-8",
-                                   codec_errors="ignore")
-        if stdout :
-            self.child.logfile_read = open(stdout, "w", encoding="utf-8")
-        if stdin :
-            self.child.logfile_send = open(stdin, "w", encoding="utf-8")
-    def send (self, text) :
-        try :
-            sys.stderr.write(f"send: {text!r}\n")
-            self.child.send(text)
-            self.child.expect(text)
-        except Exception as err :
-            sys.stderr.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
-            sys.exit(1)
-    def expect (self, text) :
-        try :
-            sys.stderr.write(f"expect: {text!r}\n")
-            self.child.expect(text)
-            sys.stderr.write(f"got: {self.child.match.group()!r}\n")
-        except Exception as err :
-            sys.stderr.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
-            sys.exit(1)
-    def exit (self) :
-        try :
-            self.child.close(force=False)
-            time.sleep(self.timeout)
-            if self.child.isalive() :
-                sys.stderr.write(f"close: FORCE\n")
-                self.child.close(force=True)
-            else :
-                sys.stderr.write(f"close: OK\n")
-        except Exception as err :
-            sys.stderr.write(f"close: {err.__class__.__name__}: {repr(str(err))}\n")
-        sys.stderr.write(f"exit: {self.child.exitstatus} {self.child.signalstatus}\n")
+class _Status (int) :
+    _str = {-1 : "FAIL", 0 : "WARN", 1 : "PASS"}
+    _num = {-1 : None, 0 : None, 1 : None}
+    all = min
+    any = max
+    def __new__ (cls, num) :
+        if cls._num[num] is None :
+            cls._num[num] = int.__new__(cls, num)
+        return cls._num[num]
+    def __str__ (self) :
+        return self._str[self]
+    def __repr__ (self) :
+        return str(self)
+    def __json__ (self) :
+        return str(self)
+    def __and__ (self, other) :
+        return self.all(self, other)
+    def __or__ (self, other) :
+        return self.any(self, other)
+    def __invert__ (self) :
+        return self._num[-self]
 
-class ScriptRunner (object) :
-    def __init__ (self, project_dir, script, lang) :
-        self.project_dir = pathlib.Path(project_dir).absolute()
-        self.src = self.project_dir / "src"
-        if not self.src.is_dir() :
-            self._raise("invalid project", "missing 'src' directory")
-        for num in itertools.count() :
-            self.test_dir = self.project_dir / pathlib.Path(f"test-{num:03}")
-            if not self.test_dir.exists() :
-                break
-        shutil.copytree(self.src, self.test_dir)
-        self.source_files = list(self._find_files(self.test_dir))
-        self.lang = load_lang(lang).Language(self.test_dir)
-        self.script = ScriptSource(script)
-        self.report = []
-    def _find_files (self, root) :
+PASS = _Status(1)
+WARN = _Status(0)
+FAIL = _Status(-1)
+
+class _Test (object) :
+    def __init__ (self, text, title="test", status=PASS, details=None) :
+        self.text = text
+        self.title = title
+        self.status = status
+        self.details = details
+        self.checks = []
+    def __json__ (self) :
+        return {"status" : str(self.status).lower(),
+                "title" : self.title,
+                "text" : self.text,
+                "checks" : self.checks,
+                "details" : self.details}
+    def add (self, status, text, title="test", details=None) :
+        self.checks.append(_Test(text, title, status, details))
+    def check (self, value, text, title="test", details=None) :
+        self.add(PASS if bool(value) else FAIL, text, title, details)
+    def any (self, text="any test must pass", title="test", details=None) :
+        return _AnyTest(self, text, title, details)
+    def all (self, text="all tests must pass", title="test", details=None) :
+        return _AllTest(self, text, title, details)
+    def not_any (self, text="all tests must fail", title="test", details=None) :
+        return _NotAnyTest(self, text, title, details)
+    def not_all (self, text="any test must fail", title="test", details=None) :
+        return _NotAllTest(self, text, title)
+
+class _NestedTest (_Test) :
+    def __init__ (self, test, text, title="test", details=None) :
+        super().__init__(text, title, details=details)
+        self.test = test
+    def __enter__ (self) :
+        self._test_add, self.test.add = self.test.add, self.add
+        return self
+    def __exit__ (self, exc_type, exc_val, exc_tb) :
+        self.test.add = self._test_add
+        self.status = self._reduce(t.status for t in self.checks)
+        self.test.checks.append(self)
+
+class _AllTest (_NestedTest) :
+    def _reduce (self, stats) :
+        return _Status.all(PASS, *stats)
+
+class _AnyTest (_NestedTest) :
+    def _reduce (self, stats) :
+        return _Status.any(FAIL, *stats)
+
+class _NotAllTest (_AllTest) :
+    def _reduce (self, stats) :
+        return ~ super()._reduce(stats)
+
+class _NotAnyTest (_AnyTest) :
+    def _reduce (self, stats) :
+        return ~ super()._reduce(stats)
+
+##
+##
+##
+
+class Test (_Test) :
+    NUM = 0
+    TESTS = []
+    def __init__ (self, text, title="test") :
+        super().__init__(text, title)
+        self.project_dir = Path(CONFIG.project)
+        self.lang_class = load_lang(CONFIG.lang)
+        self.num = self.__class__.NUM = self.__class__.NUM + 1
+    def __enter__ (self) :
+        self.test_dir = self.project_dir / f"test-{self.num:03}"
+        copytree(self.project_dir / "src", self.test_dir)
+        for path in self._walk() :
+            norm = path.with_suffix(path.suffix.lower())
+            if path != norm :
+                path.rename(norm)
+        self.source_files = list(self._walk())
+        self.more_files = {}
+        self.log_dir = self.add_path(type="dir", prefix="log-")
+        self.report_dir = self.add_path(type="dir", prefix="report-")
+        return self
+    @cached_property
+    def lang (self) :
+        return self.lang_class.Language(self)
+    def _walk (self, root=None) :
+        if root is None :
+            root = self.test_dir
         for path in root.iterdir() :
             if path.is_file() :
                 yield path
             elif path.is_dir() :
-                yield from self._find_files(path)
-    def _raise (self, error, txt=None) :
-        if isinstance(txt, Line) :
-            if txt.eof :
-                raise ScriptError(f"[{txt.pos}] {error}")
-            else :
-                raise ScriptError(f"[{txt.pos}] {error}: {txt}")
-        elif txt :
-            raise ScriptError(f"{error}: {txt}")
+                yield from self._walk(path)
+    def __exit__ (self, exc_type, exc_val, exc_tb) :
+        self.status = _AllTest._reduce(self, (t.status for t in self.checks))
+        with (self.report_dir / "test.json").open("w", **encoding) as out :
+            json.dump(self, out, ensure_ascii=False, cls=JSONEncoder)
+        test_zip = self.test_dir.with_suffix(".zip")
+        with test_zip.open("wb") as out :
+            with ZipFile(out, "w", compression=ZIP_LZMA, compresslevel=9) as zf :
+                for path in self.report_dir.glob("*.json") :
+                    zf.write(path, path.name)
+                for path in self.source_files :
+                    zf.write(path, Path("src") / path.relative_to(self.test_dir))
+                for tgt, src in self.more_files.items() :
+                    zf.write(src, tgt)
+                for path in self._walk(self.log_dir) :
+                    zf.write(path, Path("log") / path.relative_to(self.log_dir))
+        rmtree(self.test_dir)
+        self.TESTS.append(test_zip)
+    def add_path (self, log=None, name=None, **args) :
+        if log is True :
+            args["dir"] = self.log_dir
+        elif log :
+            args["dir"] = self.log_dir / log
         else :
-            raise ScriptError(f"{error}")
-    def _mktmp (self, **args) :
-        args["dir"] = self.test_dir
-        fd, path = tempfile.mkstemp(**args)
-        os.close(fd)
-        return pathlib.Path(path)
-    def run (self) :
-        for line in self.script :
-            if line.eof :
-                break
-            elif not line :
-                continue
-            cmd, *arguments = shlex.split(line, comments="#")
-            if cmd.endswith(":") or (arguments and arguments[0] == ":") :
-                cmd = cmd.rstrip(":")
-                largs = [literal(line.split(":", 1)[1].strip())]
-                kargs = {}
-            else :
-                largs = []
-                kargs = {}
-                for arg in arguments :
-                    try :
-                        key, val = arg.split("=", 1)
-                        kargs[key.strip()] = literal(val)
-                    except :
-                        kargs[arg] = True
-            handler = getattr(self, f"do_{cmd}", None)
-            if handler is None :
-                self._raise("unknow command", line)
-            handler(*largs, **kargs)
-    def do_test (self, text) :
-        self.entry = tree(title="functional test",
-                          text=text,
-                          details=None,
-                          status="pass")
-        self.execenv = {}
-    def do_exec (self, code) :
-        exec(code, self.execenv, self.execenv)
-    def do_run (self, interactive=False, until=None, timeout=1) :
-        if until :
-            code = []
-            for line in self.script :
-                if line == until :
-                    break
-                elif line.eof :
-                    self._raise("unexpected end of file", line)
-                code.append(line.raw)
-            src = self._mktmp(prefix="test-", suffix=self.lang.SUFFIX)
-            self.lang.prepare("".join(code), src.open("w", encoding="utf-8"),
-                              self.source_files)
-            self.source_files.append(src.relative_to(self.test_dir))
-        self.run_timeout = self.expect_py = io_py = None
-        if interactive :
-            self.expect_py = self._mktmp(prefix="io-", suffix=".py")
-            io_py = f"/usr/bin/python3 {self.expect_py.name}"
-            self._mk_iochk(timeout)
-        elif timeout :
-            self.run_timeout = f"--timeout={timedelta(seconds=timeout)}"
-        self.test_sh = self._mktmp(prefix="test-", suffix=".sh")
-        with self.test_sh.open("w", encoding="utf-8") as test_out :
-            self.lang.build(test_out, self.source_files)
-            self.expect_io = self.lang.run(test_out, stdio=io_py)
-    def _mk_iochk (self, timeout) :
-        with self.expect_py.open("w", encoding="utf-8") as out :
-            out.write("import sys, pexpect, time\n\n")
-            out.write(inspect.getsource(IOChecker))
-            out.write(f"\nchk = IOChecker(timeout={timeout})\n\n")
-            for line in self.script :
-                if not line :
-                    break
-                elif line and line[0] in "<>" :
-                    text = line[1:].lstrip().format(**self.execenv)
-                    if line[0] == ">" :
-                        if text.endswith("\\") :
-                            text = text[:-1]
-                        else :
-                            text += "\r\n"
-                        out.write(f"chk.send({text!r})\n")
-                    else :
-                        out.write(f"chk.expect({text!r})\n")
-                else :
-                    self.script.back()
-                    break
-            out.write("chk.exit()\n")
-    _expect_names = {"stdin" : "sent",
-                     "stdout" : "read",
-                     "stderr" : "dialog"}
-    def do_end (self) :
-        priv = self.test_dir.relative_to(pathlib.Path().absolute())
-        argv = ["firejail", "--quiet", f"--private={priv}", "--allow-debuggers"]
-        if self.run_timeout is not None :
-            argv.append(self.run_timeout)
-        argv.extend(["/bin/bash", str(self.test_sh.name)])
+            args["dir"] = self.test_dir
+        if name :
+            path = args["dir"] / name
+            path.parent.mkdir(exist_ok=True, parents=True)
+            path.open("w").close()
+            return path
+        else :
+            return new_path(**args)
+    def add_source (self, source) :
+        path = self.add_path(prefix="test-", suffix=self.lang.SUFFIX)
+        self.lang.add_source(source, path)
+        self.source_files.append(path)
+    def del_source (self, name) :
+        self.lang.del_source(name)
+    def has (self, signature) :
+        self.check(self.lang.decl(signature),
+                   f"code declares `{mdesc(signature)}`")
+    def query (self, pattern) :
+        return [found for expr in expand(pattern, self.lang)
+                for found in query(expr, self.lang.source.ast)]
+    def run (self, stdin=None, eol=True) :
+        return Run(self, stdin, eol)
+
+##
+##
+##
+
+class Run (_AllTest) :
+    def __init__ (self, test, stdin=None, eol=True) :
+        if stdin :
+            text = f"build and execute program with input `{mdesc(stdin)}`"
+        else :
+            text = f"build and execute program"
+        super().__init__(test, title="run", text=text)
+        self.stdin = stdin
+        self.eol = eol
+        self._exit_code = None
+        self._signal = None
+    def __enter__ (self) :
+        super().__enter__()
+        self.log_path = self.test.add_path(name="run.log", log="run")
+        self.log = self.log_path.open("w", **encoding)
+        return self
+    def __exit__ (self, exc_type, exc_val, exc_tb) :
+        self_checks, self.checks = self.checks, []
+        for title, text, name in (("compile", "compile every source file", "build"),
+                                  ("memory", "safety checks", "memchk")) :
+            checks = list(getattr(self.test.lang, f"report_{name}")())
+            if checks :
+                with _AllTest(self, title=title, text=text) as test :
+                    for status, title, text, details in checks :
+                        test.add(status, text, title, details)
+        self.checks.extend(self_checks)
+        super().__exit__(exc_type, exc_val, exc_tb)
+    def get (self, text) :
+        text = str(text)
         try :
-            subprocess.run(argv)
+            self.log.write(f"expect: {text!r}\n")
+            self.process.expect(text)
+            self.log.write(f"got: {self.process.match.group()!r}\n")
+            self.add(PASS, f"program prints `{mdesc(text)}`")
+        except EOF :
+            self.log.write("error: end of file\n")
+            self.add(FAIL, f"program prints `{mdesc(text)}`: got end-of-file")
+            self.terminate()
+        except TIMEOUT :
+            self.log.write("error: timeout\n")
+            self.add(FAIL, f"program prints `{mdesc(text)}`: got timeout")
+            self.terminate()
         except Exception as err :
-            print(err)
-        if self.expect_io is not None :
-            pass #TODO: read IO from expect
-        report = self.test_dir.with_suffix(".zip")
-        with report.open("wb") as out :
-            with zipfile.ZipFile(out, "w",
-                                 compression=zipfile.ZIP_LZMA,
-                                 compresslevel=9) as zf :
-                self.lang.report(zf)
-                zf.write(self.test_sh, "scripts/test.sh")
-                if self.expect_py is not None :
-                    zf.write(self.expect_py, "scripts/iocheck.py")
-                zf.writestr("tests.json", json.dumps(self.report))
-                for name, path in (self.expect_io or {}).items() :
-                    name = self._expect_names.get(name, None)
-                    if name is not None :
-                        zf.write(path, f"logs/run/{name}.log")
+            self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
+            self.add(FAIL, f"program prints `{mdesc(text)}`: got internal error")
+            self.terminate()
+    def put (self, text, eol=True) :
+        text = str(text)
+        try :
+            self.log.write(f"send: `{mdesc(text)}`\n")
+            if eol :
+                self.process.sendline(text)
+            else :
+                self.process.send(text)
+            self.test.add(PASS, f"program reads `{mdesc(text)}`")
+        except Exception as err :
+            self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
+            self.add(FAIL, f"program reads `{mdesc(text)}`: got internal error")
+            self.terminate()
+    def terminate (self) :
+        if self._exit_code is not None or self._signal is not None :
+            return
+        try :
+            self.log.write("terminate: reading until EOF\n")
+            self.process.expect(pexpect.EOF)
+        except Exception as err :
+            self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
+        try :
+            self.log.write("terminate: closing\n")
+            self.process.close(force=False)
+            sleep(CONFIG.timeout)
+            if self.process.isalive() :
+                self.log.write(f"terminate: force-closing\n")
+                self.process.close(force=True)
+        except Exception as err :
+            self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
+        self._exit_code = self.process.exitstatus
+        self._signal = self.process.signalstatus
+    @cached_property
+    def stdout (self) :
+        self.terminate()
+        return self.stdout_log.read_text(**encoding)
+    @cached_property
+    def stderr (self) :
+        self.terminate()
+        return self.stderr_log.read_text(**encoding)
+    @cached_property
+    def exit_code (self) :
+        self.terminate()
+        return self._exit_code
+    @cached_property
+    def signal (self) :
+        self.terminate()
+        return self._signal
+    @cached_property
+    def process (self) :
+        self.stdout_log = self.test.add_path(name="stdout.log", log="run")
+        self.stderr_log = self.test.add_path(name="stderr.log", log="run")
+        self.make_sh = self.test.add_path(prefix="make-", suffix=".sh")
+        self.test.more_files["src/make.sh"] = self.make_sh
+        self.test.lang.make_script(self.make_sh)
+        child = pexpect.spawn("firejail",
+                              ["--quiet", "--allow-debuggers",
+                               "/bin/bash", self.make_sh.name],
+                              cwd=str(self.test.test_dir),
+                              timeout=CONFIG.timeout,
+                              echo=False,
+                              encoding=encoding.encoding,
+                              codec_errors=encoding.errors)
+        child.logfile_read = self.stdout_log.open("w", **encoding)
+        if self.stdin is not None :
+            if self.eol :
+                child.sendline(str(self.stdin))
+            else :
+                child.send(str(self.stdin))
+        return child
+
+##
+##
+##
+
+def report () :
+    rep = Report(Path(CONFIG.project), Test.TESTS)
+    rep.save()
