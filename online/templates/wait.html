@@ -1,22 +1,31 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Résultat</title>
-    <script src="{{ url_for('static', filename='jquery.min.js') }}"></script>
-    <link type="text/css" href="{{ url_for('static', filename='style.css') }}" rel="stylesheet"/>
+    <title>Please wait</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='jquery.mobile-1.4.5.min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('css') }}"/>
+    <script src="{{ url_for('static', filename='jquery-1.11.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='jquery.mobile-1.4.5.min.js') }}"></script>
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
   </head>
   <body>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <ul>
-      {% for category, message in messages %}
-      <li class="alert alert-{{ category }}">{{ message }}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    {% endwith %}
-    <h1>Traitement en cours, veuillez patienter...</h1>
+    <div data-role="page">
+      <div data-role="header">
+        <h1>Processing, please wait...</h1>
+      </div>
+      <div data-role="main" class="ui-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul>
+          {% for category, message in messages %}
+          <li class="alert alert-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+      </div>
+    </div>
     <script>
       setTimeout(function() {
           window.location.href = "{{ status_url }}";

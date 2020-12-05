@@ -43,7 +43,7 @@ class Report (object) :
         self.project_dir = project
         self.tests = tests
         self._csv = io.StringIO()
-        self.csv = csv.DictWriter(self._csv, ["status", "title", "text", "details"])
+        self.csv = csv.DictWriter(self._csv, ["status", "text", "details"])
         self.csv.writeheader()
         self.json = []
     def save (self) :
@@ -68,7 +68,6 @@ class Report (object) :
                 test = tree(json.load(raw))
         self.csv.writerow({k : test.get(k, "") for k in self.csv.fieldnames})
         self.json.append(dict(status=test.status,
-                              title=md(test.title),
                               text=md(test.text),
                               path=path.name,
                               html=html_path))
@@ -85,11 +84,9 @@ class Report (object) :
             with self.html.ul :
                 for chk in test.checks :
                     row = {k : chk.get(k, "") for k in self.csv.fieldnames}
-                    row["title"] = (">" * nest_level) + " " + row["title"]
+                    row["text"] = (">" * nest_level) + " " + row["text"]
                     self.csv.writerow(row)
                     with self.html.li(CLASS=f"result-{chk.status}") :
-                        with self.html.span(CLASS="result-item-title") :
-                            self.html.write(f"{md(chk.title)}:")
                         with self.html.span(CLASS="result-item-text") :
                             self.html.write(f"{md(chk.text)}")
                         self._add_checks(chk, nest_level+1)

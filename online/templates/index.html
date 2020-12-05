@@ -1,30 +1,49 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Remettre votre travail</title>
-    <script src="{{ url_for('static', filename='jquery.min.js') }}"></script>
+    <title>Submit your work</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='jquery.mobile-1.4.5.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('css') }}"/>
+    <script src="{{ url_for('static', filename='jquery-1.11.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='jquery.mobile-1.4.5.min.js') }}"></script>
     <script src="{{ url_for('static', filename='index.js') }}"></script>
-    <link type="text/css" href="{{ url_for('static', filename='style.css') }}" rel="stylesheet"/>
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
   </head>
   <body>
-    <h1>Remplissez tous les champs du formulaire ci-dessous pour remettre votre travail.</h1>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <ul>
-      {% for category, message in messages %}
-      <li class="alert alert-{{ category }}">{{ message }}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    {% endwith %}
-    <form id="form" method=POST enctype=multipart/form-data action="{{ url_for('index') }}">
-      <label for="student">Numéro d'étudiant</label>
-      <input type="text" name="student">
-      <label for="password">Mot de passe</label>
-      <input type="password" name="password">
-      <label for="consent">Je certifie que je suis la personne identifiée ci-dessus et que le travail rendu ci-dessous est le mien</label>
-      <input type="checkbox" name="consent" class="checkbox" unchecked>
-    </form>
+    <div data-role="page">
+      <div data-role="header">
+        <h1>Submit your work</h1>
+      </div>
+      <div data-role="main" class="ui-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul>
+          {% for category, message in messages %}
+          <li class="alert alert-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+        <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('index') }}" data-ajax="false">
+          <label for="student">Student's number</label>
+          <input type="text" name="student">
+          <label for="password">Password</label>
+          <input type="password" name="password">
+          <label for="consent">
+            <ul>
+              <li class="lang lang-en">I certify that I am the person identified above and that the work submitted below is mine.</li>
+              <li class="lang lang-fr">Je certifie que je suis la personne identifiée ci-dessus et que le travail rendu ci-dessous est le mien.</li>
+            </ul>
+          </label>
+          <input type="checkbox" name="consent" unchecked>
+        </form>
+      </div>
+    </div>
+    <script>
+      $(function () {
+          $("input[type=checkbox]").prop("checked", false).checkboxradio("refresh");
+      });
+    </script>
   </body>
 </html> 

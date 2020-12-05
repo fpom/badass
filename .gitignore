@@ -12,4 +12,5 @@ __pycache__
 a.out
 /online/data
 /online/upload/*
+/online/test
 /tmp

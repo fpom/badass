@@ -53,7 +53,7 @@ class Form (_Form) :
                 out.write(f'    "{child}",\n')
             else :
                 out.write(f'"{child}",\n')
-        out.write('    "<input type=\'submit\' value=\'Envoyer\'>");\n');
+        out.write('    "<input type=\'submit\' value=\'Submit\'>");\n');
         out.write(f'}}\n\n')
 
 def first (data) :
@@ -65,7 +65,7 @@ def first (data) :
 class Loader (object) :
     def load (self, stream) :
         data = yaml.load(stream, Loader=yaml.FullLoader)
-        ret = Select("cours", "Course")
+        ret = Select("course", "Course")
         for course in data :
             ret.append(self._load(course))
         return ret

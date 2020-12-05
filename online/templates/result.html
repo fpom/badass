@@ -1,34 +1,38 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Résultats de l'analyse</title>
-    <script src="{{ url_for('static', filename='jquery.min.js') }}"></script>
-    <link type="text/css" rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+    <title>Analysis result</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='jquery.mobile-1.4.5.min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('css') }}"/>
+    <script src="{{ url_for('static', filename='jquery-1.11.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='jquery.mobile-1.4.5.min.js') }}"></script>
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
   </head>
   <body>
-    <h1>Analyse de votre travail.</h1>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <ul>
-      {% for category, message in messages %}
-      <li class="alert alert-{{ category }}">{{ message }}</li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    {% endwith %}
-    {% for status, glyph, title, text in status %}
-    <div class="result result-{{ status }}">
-      <div class="result-icon">
-        <svg class="bi" width="2em" height="2em" fill="currentColor">
-          <use xlink:href="{{ url_for('static', filename='bootstrap-icons.svg') }}#{{ glyph }}"/>
-        </svg>
+    <div data-role="page">
+      <div data-role="header">
+        <h1>Analysis results of your work</h1>
       </div>
-      <div class="result-content">
-        <span class="result-title">{{ title }}:</span>
-        {{ text }}
+      <div data-role="main" class="ui-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul>
+          {% for category, message in messages %}
+          <li class="alert alert-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+        {% for test in report %}
+        <div data-role="collapsible" data-content-theme="false" data-collapsed-icon="carat-d" data-expanded-icon="carat-u" data-iconpos="right">
+          <h5 class="result result-{{ test['status'] }} ui-btn ui-shadow ui-corner-all ui-icon-{{ test['icon'] }} ui-btn-icon-left">
+            {{ test["text"] }}
+          </h5>
+          <div>{{ test["html"] }}</div>
+        </div>
+        {% endfor %}
       </div>
     </div>
-    {% endfor %}
   </body>
 </html> 

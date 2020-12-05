@@ -50,34 +50,32 @@ WARN = _Status(0)
 FAIL = _Status(-1)
 
 class _Test (object) :
-    def __init__ (self, text, title="test", status=PASS, details=None) :
+    def __init__ (self, text, status=PASS, details=None) :
         self.text = text
-        self.title = title
         self.status = status
         self.details = details
         self.checks = []
     def __json__ (self) :
         return {"status" : str(self.status).lower(),
-                "title" : self.title,
                 "text" : self.text,
                 "checks" : self.checks,
                 "details" : self.details}
-    def add (self, status, text, title="test", details=None) :
-        self.checks.append(_Test(text, title, status, details))
-    def check (self, value, text, title="test", details=None) :
-        self.add(PASS if bool(value) else FAIL, text, title, details)
-    def any (self, text="any test must pass", title="test", details=None) :
-        return _AnyTest(self, text, title, details)
-    def all (self, text="all tests must pass", title="test", details=None) :
-        return _AllTest(self, text, title, details)
-    def not_any (self, text="all tests must fail", title="test", details=None) :
-        return _NotAnyTest(self, text, title, details)
-    def not_all (self, text="any test must fail", title="test", details=None) :
-        return _NotAllTest(self, text, title)
+    def add (self, status, text, details=None) :
+        self.checks.append(_Test(text, status, details))
+    def check (self, value, text, details=None) :
+        self.add(PASS if bool(value) else FAIL, text, details)
+    def any (self, text="at least one test must pass", details=None) :
+        return _AnyTest(self, text, details)
+    def all (self, text="all tests must pass", details=None) :
+        return _AllTest(self, text, details)
+    def not_any (self, text="all tests must fail", details=None) :
+        return _NotAnyTest(self, text, details)
+    def not_all (self, text="at least one test must fail", details=None) :
+        return _NotAllTest(self, text)
 
 class _NestedTest (_Test) :
-    def __init__ (self, test, text, title="test", details=None) :
-        super().__init__(text, title, details=details)
+    def __init__ (self, test, text, details=None) :
+        super().__init__(text, details=details)
         self.test = test
     def __enter__ (self) :
         self._test_add, self.test.add = self.test.add, self.add
@@ -110,8 +108,8 @@ class _NotAnyTest (_AnyTest) :
 class Test (_Test) :
     NUM = 0
     TESTS = []
-    def __init__ (self, text, title="test") :
-        super().__init__(text, title)
+    def __init__ (self, text) :
+        super().__init__(text)
         self.project_dir = Path(CONFIG.project)
         self.lang_class = load_lang(CONFIG.lang)
         self.num = self.__class__.NUM = self.__class__.NUM + 1
@@ -194,7 +192,7 @@ class Run (_AllTest) :
             text = f"build and execute program with input `{mdesc(stdin)}`"
         else :
             text = f"build and execute program"
-        super().__init__(test, title="run", text=text)
+        super().__init__(test, text=text)
         self.stdin = stdin
         self.eol = eol
         self._exit_code = None
@@ -206,13 +204,13 @@ class Run (_AllTest) :
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         self_checks, self.checks = self.checks, []
-        for title, text, name in (("compile", "compile every source file", "build"),
-                                  ("memory", "safety checks", "memchk")) :
+        for text, name in (("compile every source file", "build"),
+                           ("memory safety checks", "memchk")) :
             checks = list(getattr(self.test.lang, f"report_{name}")())
             if checks :
-                with _AllTest(self, title=title, text=text) as test :
-                    for status, title, text, details in checks :
-                        test.add(status, text, title, details)
+                with _AllTest(self, text=text) as test :
+                    for status, text, details in checks :
+                        test.add(status, text, details)
         self.checks.extend(self_checks)
         super().__exit__(exc_type, exc_val, exc_tb)
     def get (self, text) :

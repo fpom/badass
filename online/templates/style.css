@@ -1,0 +1,101 @@
+form {
+    width: 100%;
+}
+
+form input {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+form input[type=checkbox] {
+    display: block;
+    width: unset;
+    margin: 0px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    position: relative !important;
+}
+
+form select {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+form label {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.alert {
+    display: block;
+    margin: 0px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    padding: 20px;
+    border-style: solid;
+}
+
+.alert-error {
+    border-color: #A00;
+    background-color: #FDD;
+}
+
+.alert-warning {
+    border-color: #D60;
+    background-color: #FFD;
+}
+
+.alert-info {
+    border-color: #0A0;
+    background-color: #DFD;
+}
+
+.result > a {
+    font-weight: bold;
+    padding-left: 2.5em;
+}
+
+.result-fail > .ui-collapsible-heading-toggle {
+    background-color: #FDD !important;
+}
+
+.result-warn > .ui-collapsible-heading-toggle {
+    background-color: #FFD !important;
+}
+
+.result-pass > .ui-collapsible-heading-toggle {
+    background-color: #DFD !important;
+}
+
+ul .result-fail {
+    list-style-image: url("{{ url_for('static', filename='fail.svg') }}");
+    color: #900;
+} 
+
+ul .result-warn {
+    list-style-image: url("{{ url_for('static', filename='warn.svg') }}");
+    color: #C60;
+} 
+
+ul .result-pass {
+    list-style-image: url("{{ url_for('static', filename='pass.svg') }}");
+    color: #090;
+}
+
+li.lang {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+li.lang-en {
+    list-style-image: url("{{ url_for('static', filename='flags/en.png') }}");
+}
+
+li.lang-fr {
+    list-style-image: url("{{ url_for('static', filename='flags/fr.png') }}");
+}

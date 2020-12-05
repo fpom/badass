@@ -99,7 +99,7 @@ class Language (BaseLanguage) :
             else :
                 stat = PASS
                 details = io.StringIO()
-            yield stat, action, f"`{path}`", details.getvalue()
+            yield stat, f"{action} `{path}`", details.getvalue()
     def report_memchk (self) :
         memchk = {}
         for path in self.mem.glob("DrMemory*/results.txt") :
@@ -109,9 +109,8 @@ class Language (BaseLanguage) :
         for pid, res in sorted(memchk.items()) :
             for num, info in sorted(res.errors.items()) :
                 details = io.StringIO()
-                details.write(f"{mdesc(info.description)}<br>\n"
-                              f"process {pid} (child of {make_pid}), call stack:\n\n")
+                details.write(f"process {pid} (child of {make_pid}), call stack:\n\n")
                 for n, frame in enumerate(info.stack) :
                     details.write(f" {n+1}. function `{frame.function}`"
                                   f" (file `{frame.path}`, line `{frame.line}`)\n")
-                yield WARN, "warning", info.name.lower(), details.getvalue()
+                yield WARN, f"{mdesc(info.description)}", details.getvalue()

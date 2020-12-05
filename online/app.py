@@ -53,13 +53,12 @@ teachers = UserDB("data/teachers.csv")
 ## flask app starts here
 ##
 
-from flask import Flask, abort, current_app, request, url_for, render_template, flash, redirect, session
+from flask import Flask, abort, current_app, request, url_for, render_template, flash, redirect, session, Markup, Response
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 from datetime import datetime
 from functools import wraps
-import threading
-import uuid
+import threading, subprocess, zipfile, json, uuid
 
 app = Flask("badass-online")
 app.secret_key = open("data/secret_key", "rb").read()
@@ -90,8 +89,7 @@ def before_first_request () :
     thread = threading.Thread(target=clean_old_tasks)
     thread.start()
 
-#TODO: delay=3000
-def wait_task (task_id, delay=500) :
+def wait_task (task_id, delay=3000) :
     status_url = url_for("gettaskstatus", task_id=task_id)
     return render_template("wait.html", status_url=status_url, status_wait=delay)
 
@@ -133,6 +131,16 @@ def gettaskstatus (task_id) :
     return task["return_value"]
 
 ##
+## CSS & JS
+##
+
+@app.route("/assets/style.css")
+def css () :
+    resp = Response(render_template("style.css"), status=200, mimetype="text/css")
+    resp.headers["Content-Type"] = "text/css; charset=utf-8"
+    return resp
+
+##
 ## students interface
 ##
 
@@ -151,7 +159,7 @@ def index () :
         errors.append("numéro d'étudiant ou mot de passe incorrect")
     if form.pop("consent", None) != "on" :
         errors.append("vous devez certifier votre identité")
-    if any(not src.filename for src in request.files.getlist("source")) :
+    if not request.files.getlist("source") :
         errors.append("fichier(s) source(s) manquant(s)")
     if errors :
         for msg in errors :
@@ -181,15 +189,26 @@ def index () :
     # go process the submission
     return redirect(url_for("result"))
 
+_result_icons = {"fail" : "delete",
+                 "warn" : "info",
+                 "pass" : "check"}
+
 @app.route("/result")
 @async_api
 def result () :
-    form = session["form"]
-    status = [[("fail", "bug-fill"),
-               ("warn", "exclamation-triangle-fill"),
-               ("pass", "check-circle-fill")][i % 3] + item
-              for i, item in enumerate(form.items())]
-    return render_template("result.html", status=status)
+    script = pathlib.Path(session["form"]["path"])
+    project = pathlib.Path(session["form"]["base"])
+    subprocess.run(["python", "-m", "badass", "run", script, project])
+    with zipfile.ZipFile(project / "report.zip") as zf :
+        with zf.open("report.json") as stream :
+            report = json.load(stream)
+        for test in report :
+            with zf.open(test["html"]) as stream :
+                test["html"] = stream.read().decode(encoding="utf-8", errors="replace")
+            test["icon"] = _result_icons[test["status"]]
+            for key in ("text", "html") :
+                test[key] = Markup(test[key])
+    return render_template("result.html", report=report)
 
 ##
 ## teachers interface
