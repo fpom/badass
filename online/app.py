@@ -75,16 +75,11 @@ tasks = {}
 def before_first_request () :
     def clean_old_tasks () :
         global tasks
-        print(" * tasks garbage collector started")
         while True :
             five_min_ago = datetime.timestamp(datetime.utcnow()) - 5 * 60
-            old = len(tasks)
             tasks = {task_id : task for task_id, task in tasks.items()
                      if "completion_timestamp" not in task
                      or task["completion_timestamp"] > five_min_ago}
-            new = len(tasks)
-            if old != new :
-                print(f" * garbage collected {old - new} tasks")
             time.sleep(60)
     thread = threading.Thread(target=clean_old_tasks)
     thread.start()
