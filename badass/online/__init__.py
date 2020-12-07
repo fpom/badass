@@ -58,7 +58,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 from datetime import datetime
 from functools import wraps
-import threading, subprocess, zipfile, json, uuid, os
+import threading, subprocess, zipfile, json, uuid, os, sys
 
 app = Flask("badass-online")
 app.secret_key = open("data/secret_key", "rb").read()
@@ -67,18 +67,19 @@ app.secret_key = open("data/secret_key", "rb").read()
 ## debug
 ##
 
+ENV = dict(os.environ)
+ENV["PYTHONPATH"] = ":".join(sys.path)
+
 @app.route("/debug")
 def debug () :
     import sys, json
-    env = dict(os.environ)
-    env["PYTHONPATH"] = ":".join(sys.path)
     return json.dumps({"sys.path" : list(sys.path),
-                       "os.environ" : env,
+                       "os.environ" : ENV,
                        "python3 env" : subprocess.check_output(
                            ["python3", "-c",
                             "import os, sys; print(sys.path, os.environ)"],
                            encoding="utf-8",
-                           env=env)})
+                           env=ENV)})
 
 ##
 ## asynchronous API for long running tasks
@@ -211,7 +212,7 @@ def result () :
     script = pathlib.Path(session["form"]["path"])
     project = pathlib.Path(session["form"]["base"])
     subprocess.run(["python3", "-m", "badass", "run", script, project],
-                   env=dict(os.environ))
+                   env=ENV)
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
