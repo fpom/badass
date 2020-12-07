@@ -10,7 +10,7 @@ __pycache__
 /build
 /dist
 a.out
-/online/data
-/online/upload/*
-/online/test
+badass/online/data
+badass/online/upload/*
+badass/online/test
 /tmp
