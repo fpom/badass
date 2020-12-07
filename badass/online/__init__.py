@@ -1,4 +1,13 @@
 ##
+##
+##
+
+try :
+    PYTHON
+except NameError :
+    PYTHON = "/usr/bin/python3"
+
+##
 ## users management
 ##
 
@@ -193,7 +202,7 @@ _result_icons = {"fail" : "delete",
 def result () :
     script = pathlib.Path(session["form"]["path"])
     project = pathlib.Path(session["form"]["base"])
-    subprocess.run(["python", "-m", "badass", "run", script, project])
+    subprocess.run([PYTHON, "-m", "badass", "run", script, project])
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
