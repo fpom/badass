@@ -25,10 +25,10 @@ class Language (BaseLanguage) :
         return Source(self.test.test_dir, self.test.source_files)
     def add_source (self, source, path) :
         self.source.add(source, path)
-    def del_source (self, name) :
-        self.source.discard(name)
-    def decl (self, signature) :
-        return self.source.decl(signature)
+    def del_source (self, *names) :
+        self.source.disable(names)
+    def decl (self, name) :
+        return self.source.decl(name)
     def __getitem__ (self, path) :
         try :
             path = path.relative_to(self.test.test_dir)
@@ -85,12 +85,12 @@ class Language (BaseLanguage) :
         for action, path, cmd, stdio in self.log :
             retcode = stdio.exit_code.read_text(encoding="utf-8").strip()
             details = io.StringIO()
-            details.write(f"`$ {cmd}`\\\n(returned {retcode})")
+            details.write(f"`$ {cmd}` (returned {retcode})")
             output = False
             for key in ("stdout", "stderr") :
                 txt = stdio[key].read_text(**encoding).rstrip()
                 if txt :
-                    details.write(f"\n\n**{key}:**\n\n```\n{txt}\n```")
+                    details.write(f"<br>\n**{key}:**<br>\n```\n{txt}\n```")
                     output = True
             if retcode != "0" :
                 stat = FAIL
