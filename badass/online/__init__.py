@@ -70,12 +70,15 @@ app.secret_key = open("data/secret_key", "rb").read()
 @app.route("/debug")
 def debug () :
     import sys, json
+    env = dict(os.environ)
+    env["PYTHONPATH"] = ":".join(sys.path)
     return json.dumps({"sys.path" : list(sys.path),
-                       "os.environ" : dict(os.environ),
+                       "os.environ" : env,
                        "python3 env" : subprocess.check_output(
                            ["python3", "-c",
                             "import os, sys; print(sys.path, os.environ)"],
-                           encoding="utf-8")})
+                           encoding="utf-8",
+                           env=env)})
 
 ##
 ## asynchronous API for long running tasks
