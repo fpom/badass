@@ -60,8 +60,10 @@ class Source (object) :
             return info[1]
     def discard (self, name) :
         self.sig.pop(name, None)
-        print(self.obj.keys())
-        path, ast = self.obj.pop(name)
+        try :
+            path, ast = self.obj.pop(name)
+        except :
+            raise Exception(f"{name!r} in {self.obj.keys()}")
         path = self.base_dir / path
         begin = ast.range.begin.offset
         end = ast.range.end.offset
