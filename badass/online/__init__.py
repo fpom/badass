@@ -69,9 +69,9 @@ app.secret_key = open("data/secret_key", "rb").read()
 
 @app.route("/debug")
 def debug () :
-    import os, sys
-    return {"sys.path" : sys.path,
-            "os.environ" : os.environ}
+    import os, sys, json
+    return json.dumps({"sys.path" : sys.path,
+                       "os.environ" : os.environ})
 
 ##
 ## asynchronous API for long running tasks
