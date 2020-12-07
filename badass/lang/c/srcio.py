@@ -59,11 +59,8 @@ class Source (object) :
         if info is not None :
             return info[1]
     def discard (self, name) :
+        path, ast = self.obj[name]
         self.sig.pop(name, None)
-        try :
-            path, ast = self.obj.pop(name)
-        except :
-            raise Exception(f"{name!r} in {self.obj.keys()}")
         path = self.base_dir / path
         begin = ast.range.begin.offset
         end = ast.range.end.offset
