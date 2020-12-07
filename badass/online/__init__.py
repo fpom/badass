@@ -1,13 +1,4 @@
 ##
-##
-##
-
-try :
-    PYTHON
-except NameError :
-    PYTHON = "/usr/bin/python3"
-
-##
 ## users management
 ##
 
@@ -71,6 +62,16 @@ import threading, subprocess, zipfile, json, uuid
 
 app = Flask("badass-online")
 app.secret_key = open("data/secret_key", "rb").read()
+
+##
+## debug
+##
+
+@app.route("/debug")
+def debug () :
+    import os, sys
+    return {"sys.path" : sys.path,
+            "os.environ" : os.environ}
 
 ##
 ## asynchronous API for long running tasks
