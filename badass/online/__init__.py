@@ -72,7 +72,10 @@ def debug () :
     import sys, json
     return json.dumps({"sys.path" : list(sys.path),
                        "os.environ" : dict(os.environ),
-                       "python3 env" : subprocess.check_output(["python3", "-c", "import os, sys; print(sys.path, os.environ)"])})
+                       "python3 env" : subprocess.check_output(
+                           ["python3", "-c",
+                            "import os, sys; print(sys.path, os.environ)"],
+                           encoding="utf-8")})
 
 ##
 ## asynchronous API for long running tasks
