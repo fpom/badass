@@ -58,7 +58,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 from datetime import datetime
 from functools import wraps
-import threading, subprocess, zipfile, json, uuid
+import threading, subprocess, zipfile, json, uuid, os
 
 app = Flask("badass-online")
 app.secret_key = open("data/secret_key", "rb").read()
@@ -69,7 +69,7 @@ app.secret_key = open("data/secret_key", "rb").read()
 
 @app.route("/debug")
 def debug () :
-    import os, sys, json
+    import sys, json
     return json.dumps({"sys.path" : list(sys.path),
                        "os.environ" : dict(os.environ)})
 
@@ -203,7 +203,8 @@ _result_icons = {"fail" : "delete",
 def result () :
     script = pathlib.Path(session["form"]["path"])
     project = pathlib.Path(session["form"]["base"])
-    subprocess.run([PYTHON, "-m", "badass", "run", script, project])
+    subprocess.run(["python3", "-m", "badass", "run", script, project],
+                   env=dict(os.environ))
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
