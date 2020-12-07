@@ -25,8 +25,8 @@ class Language (BaseLanguage) :
         return Source(self.test.test_dir, self.test.source_files)
     def add_source (self, source, path) :
         self.source.add(source, path)
-    def del_source (self, *names) :
-        self.source.disable(names)
+    def del_source (self, name) :
+        self.source.discard(name)
     def decl (self, name) :
         return self.source.decl(name)
     def __getitem__ (self, path) :

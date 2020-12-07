@@ -11,19 +11,6 @@ _tidy_words = re.compile(r"(\B\s+\b)|(\b\s+\B)|(\B\s+\B)")
 def tidy (decl) :
     return _tidy_words.sub(" ", _tidy_multi.sub(" ", decl.strip()))
 
-_cpp_head = ""
-
-def cpp (src, env={}, **var) :
-    _env = dict(env)
-    _env.update(var)
-    src = subprocess.run(["cpp", "-P", "--traditional", "-C"]
-                         + [f"-D{k}={v}" for k, v in _env.items()],
-                         input=src.replace("#include", "//#//include"),
-                         capture_output=True, **encoding).stdout
-    return src.replace(_cpp_head, "").replace("//#//include", "#include")
-
-_cpp_head = cpp("")
-
 class Source (object) :
     def __init__ (self, base_dir, source_files) :
         self.base_dir = base_dir
@@ -71,27 +58,20 @@ class Source (object) :
         info = self.obj.get(tidy(signature), None)
         if info is not None :
             return info[1]
-    def disable (self, names) :
-        tocpp = []
-        macro = {}
-        for old in (tidy(n) for n in names) :
-            if old not in self.obj :
-                continue
-            path, _ = self.obj.pop(old)
-            self.sig.pop(old, None)
-            path = self.base_dir / path
-            tocpp.append(path)
-            new = f"__disabled__{old}"
-            for num in count() :
-                if new not in self.obj :
-                    break
-                new = f"__disabled__{old}__{num}"
-            macro[old] = new
-        for path in tocpp :
-            src = cpp(path.read_text(**encoding), macro)
-            with path.open("w", **encoding) as out :
-                out.write(src)
-            self.parse(path)
+    def discard (self, name) :
+        self.sig.pop(name, None)
+        path, ast = self.obj.pop(name)
+        path = self.base_dir / path
+        begin = ast.range.begin.offset
+        end = ast.range.end.offset
+        src = path.read_text(**encoding)
+        with path.open("w", **encoding) as out :
+            out.write(src[:begin])
+            out.write("/*")
+            out.write(src[begin:end])
+            out.write("*/")
+            out.write(src[end:])
+        self.parse(path)
     def add (self, source, path) :
         with path.open("w", **encoding) as out :
             for line in source.splitlines(keepends=True) :
