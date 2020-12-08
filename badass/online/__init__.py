@@ -93,9 +93,11 @@ def before_first_request () :
         global tasks
         while True :
             time.sleep(60)
-            five_min_ago = datetime.timestamp(datetime.utcnow()) - 5 * 60
-            tasks = {task_id : task for task_id, task in tasks.items()
-                     if task.get("completion_timestamp", five_min_ago) < five_min_ago}
+            five_min_ago = datetime.timestamp(datetime.utcnow()) - 300
+            for task_id, task in list(tasks.items()) :
+                if task.get("completion_timestamp", five_min_ago) < five_min_ago :
+                    print(f" # Dropping task {task_id}")
+                    del tasks[task_id]
     thread = threading.Thread(target=clean_old_tasks)
     thread.start()
 
@@ -230,17 +232,16 @@ def result () :
             break
         except FileExistsError :
             pass
+    link = url_for("permalink", name=str(link.name), _external=True)
     with (project / "permalink").open("w") as out :
-        out.write(link.name)
-    return render_template("result.html", report=report,
-                           permalink=url_for("permalink", name=str(link.name)))
+        out.write(link)
+    return render_template("result.html", report=report, permalink=link)
 
 @app.route("/permalink/<name>")
 def permalink (name) :
     report = load_report(pathlib.Path(PERMALINK) / name)
     link = (pathlib.Path(PERMALINK) / name / "permalink").read_text()
-    return render_template("result.html", report=report,
-                           permalink=url_for("permalink", name=link))
+    return render_template("result.html", report=report, permalink=link)
 
 ##
 ## teachers interface

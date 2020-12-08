@@ -89,11 +89,11 @@ class _NestedTest (_Test) :
 
 class _AllTest (_NestedTest) :
     def _reduce (self, stats) :
-        return _Status.all(PASS, *stats)
+        return _Status.all(PASS, PASS, *stats)
 
 class _AnyTest (_NestedTest) :
     def _reduce (self, stats) :
-        return _Status.any(FAIL, *stats)
+        return _Status.any(FAIL, FAIL, *stats)
 
 class _NotAllTest (_AllTest) :
     def _reduce (self, stats) :
@@ -153,7 +153,7 @@ class Test (_Test) :
                     zf.write(src, tgt)
                 for path in self._walk(self.log_dir) :
                     zf.write(path, Path("log") / path.relative_to(self.log_dir))
-        rmtree(self.test_dir)
+        rmtree(self.test_dir, ignore_errors=True)
         self.TESTS.append(test_zip)
     def add_path (self, log=None, name=None, **args) :
         if log is True :
@@ -209,10 +209,9 @@ class Run (_AllTest) :
         for text, name in (("compile and link", "build"),
                            ("memory safety checks", "memchk")) :
             checks = list(getattr(self.test.lang, f"report_{name}")())
-            if checks :
-                with _AllTest(self, text=text) as test :
-                    for status, text, details in checks :
-                        test.add(status, text, details, auto=True)
+            with _AllTest(self, text=text) as test :
+                for status, text, details in checks :
+                    test.add(status, text, details, auto=True)
         self.checks.extend(self_checks)
         super().__exit__(exc_type, exc_val, exc_tb)
     def get (self, text) :
