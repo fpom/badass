@@ -50,32 +50,34 @@ WARN = _Status(0)
 FAIL = _Status(-1)
 
 class _Test (object) :
-    def __init__ (self, text, status=PASS, details=None) :
+    def __init__ (self, text, status=PASS, details=None, auto=False) :
         self.text = text
         self.status = status
         self.details = details
+        self.auto = auto
         self.checks = []
     def __json__ (self) :
         return {"status" : str(self.status).lower(),
                 "text" : self.text,
                 "checks" : self.checks,
-                "details" : self.details}
-    def add (self, status, text, details=None) :
-        self.checks.append(_Test(text, status, details))
-    def check (self, value, text, details=None) :
-        self.add(PASS if bool(value) else FAIL, text, details)
-    def any (self, text="at least one test must pass", details=None) :
-        return _AnyTest(self, text, details)
-    def all (self, text="all tests must pass", details=None) :
-        return _AllTest(self, text, details)
-    def not_any (self, text="all tests must fail", details=None) :
-        return _NotAnyTest(self, text, details)
-    def not_all (self, text="at least one test must fail", details=None) :
-        return _NotAllTest(self, text)
+                "details" : self.details,
+                "auto" : self.auto}
+    def add (self, status, text, details=None, auto=False) :
+        self.checks.append(_Test(text, status, details, auto))
+    def check (self, value, text, details=None, auto=False) :
+        self.add(PASS if bool(value) else FAIL, text, details, auto)
+    def any (self, text="at least one test must pass", details=None, auto=False) :
+        return _AnyTest(self, text, details, auto)
+    def all (self, text="all tests must pass", details=None, auto=False) :
+        return _AllTest(self, text, details, auto)
+    def not_any (self, text="all tests must fail", details=None, auto=False) :
+        return _NotAnyTest(self, text, details, auto)
+    def not_all (self, text="at least one test must fail", details=None, auto=False) :
+        return _NotAllTest(self, text, details, auto)
 
 class _NestedTest (_Test) :
-    def __init__ (self, test, text, details=None) :
-        super().__init__(text, details=details)
+    def __init__ (self, test, text, details=None, auto=False) :
+        super().__init__(text, details=details, auto=auto)
         self.test = test
     def __enter__ (self) :
         self._test_add, self.test.add = self.test.add, self.add
@@ -204,13 +206,13 @@ class Run (_AllTest) :
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         self_checks, self.checks = self.checks, []
-        for text, name in (("compile every source file", "build"),
+        for text, name in (("compile and link", "build"),
                            ("memory safety checks", "memchk")) :
             checks = list(getattr(self.test.lang, f"report_{name}")())
             if checks :
                 with _AllTest(self, text=text) as test :
                     for status, text, details in checks :
-                        test.add(status, text, details)
+                        test.add(status, text, details, auto=True)
         self.checks.extend(self_checks)
         super().__exit__(exc_type, exc_val, exc_tb)
     def get (self, text) :
@@ -240,7 +242,7 @@ class Run (_AllTest) :
                 self.process.sendline(text)
             else :
                 self.process.send(text)
-            self.test.add(PASS, f"program reads `{mdesc(text)}`")
+            self.add(PASS, f"program reads `{mdesc(text)}`")
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
             self.add(FAIL, f"program reads `{mdesc(text)}`: got internal error")

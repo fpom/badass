@@ -43,7 +43,7 @@ class Report (object) :
         self.project_dir = project
         self.tests = tests
         self._csv = io.StringIO()
-        self.csv = csv.DictWriter(self._csv, ["status", "text", "details"])
+        self.csv = csv.DictWriter(self._csv, ["test", "status", "auto", "text", "details"])
         self.csv.writeheader()
         self.json = []
     def save (self) :
@@ -66,7 +66,9 @@ class Report (object) :
         with ZipFile(path) as zf :
             with zf.open(f"test.json") as raw :
                 test = tree(json.load(raw))
-        self.csv.writerow({k : test.get(k, "") for k in self.csv.fieldnames})
+        row = {k : test.get(k, "") for k in self.csv.fieldnames}
+        row["test"] = test["test"] = int(path.stem.split("-")[-1])
+        self.csv.writerow(row)
         self.json.append(dict(status=test.status,
                               text=md(test.text),
                               path=path.name,
@@ -82,9 +84,9 @@ class Report (object) :
             self.html.write(md(test.details))
         if test.checks :
             with self.html.ul :
-                for chk in test.checks :
+                for num, chk in enumerate(test.checks) :
                     row = {k : chk.get(k, "") for k in self.csv.fieldnames}
-                    row["text"] = (">" * nest_level) + " " + row["text"]
+                    row["test"] = chk["test"] = f"{test.test}.{num+1}"
                     self.csv.writerow(row)
                     with self.html.li(CLASS=f"result-{chk.status}") :
                         with self.html.span(CLASS="result-item-text") :

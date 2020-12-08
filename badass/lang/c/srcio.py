@@ -63,13 +63,13 @@ class Source (object) :
         self.sig.pop(name, None)
         path = self.base_dir / path
         begin = ast.range.begin.offset
-        end = ast.range.end.offset
-        src = path.read_text(**encoding)
-        with path.open("w", **encoding) as out :
+        end = ast.range.end.offset + 1
+        src = path.read_bytes()
+        with path.open("wb") as out :
             out.write(src[:begin])
-            out.write("/*")
+            out.write(b"/*")
             out.write(src[begin:end])
-            out.write("*/")
+            out.write(b"*/")
             out.write(src[end:])
         self.parse(path)
     def add (self, source, path) :

@@ -12,7 +12,7 @@
   <body>
     <div data-role="page">
       <div data-role="header">
-        <h1>Analysis results of your work</h1>
+        <h1>Analysis results</h1>
       </div>
       <div data-role="main" class="ui-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -32,6 +32,9 @@
           <div>{{ test["html"] }}</div>
         </div>
         {% endfor %}
+      </div>
+      <div data-role="footer" class="ui-bar">
+        <a href="{{ permalink }}" data-ajax="false" data-icon="forward" data-shadow="false" data-mini="true" style="float:right;">Permalink</a>
       </div>
     </div>
   </body>

@@ -1,8 +1,27 @@
+import hashlib, collections, time, pathlib, csv, threading, subprocess, \
+    zipfile, json, secrets, os, sys
+
+from datetime import datetime
+from functools import wraps
+
+from flask import Flask, abort, current_app, request, url_for, render_template, \
+    flash, redirect, session, Markup, Response, send_file
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException, InternalServerError
+
+##
+##
+##
+
+ENV = dict(os.environ)
+ENV["PYTHONPATH"] = ":".join(sys.path)
+
+UPLOAD = pathlib.Path("upload")
+PERMALINK = pathlib.Path("permalink")
+
 ##
 ## users management
 ##
-
-import hashlib, collections, time, pathlib, csv
 
 def salthash (s, p) :
     salted = (s + p).encode("utf-8")
@@ -20,7 +39,7 @@ class UserDB (object) :
     def reload (self) :
         if self.loaded > self.path.stat().st_mtime :
             return
-        groups = set()
+        groups = {}
         bykey = {}
         with open(self.path, encoding="utf-8") as infile :
             self.fields = infile.readline().strip().split(",")
@@ -28,15 +47,19 @@ class UserDB (object) :
             user = collections.namedtuple("user", self.fields)
             db = csv.DictReader(infile, self.fields)
             for item in db :
+                item["group"] = item["group"].replace(" ", "_")
                 row = user(**item)
-                groups.add(row.group)
-                bykey[getattr(row, self.key)] = row
+                key = getattr(row, self.key)
+                if row.group not in groups :
+                    groups[row.group] = []
+                groups[row.group].append(key)
+                bykey[key] = row
         self.loaded = time.time()
-        self._groups = list(sorted(groups))
-        self.bykey = bykey
+        self._groups = groups
+        self._bykey = bykey
     def __getitem__ (self, key) :
         self.reload()
-        return self.bykey[key]
+        return self._bykey[key]
     def auth (self, key, password) :
         self.reload()
         if "salt" not in self.fields :
@@ -53,33 +76,8 @@ teachers = UserDB("data/teachers.csv")
 ## flask app starts here
 ##
 
-from flask import Flask, abort, current_app, request, url_for, render_template, flash, redirect, session, Markup, Response
-from werkzeug.utils import secure_filename
-from werkzeug.exceptions import HTTPException, InternalServerError
-from datetime import datetime
-from functools import wraps
-import threading, subprocess, zipfile, json, uuid, os, sys
-
 app = Flask("badass-online")
 app.secret_key = open("data/secret_key", "rb").read()
-
-##
-## debug
-##
-
-ENV = dict(os.environ)
-ENV["PYTHONPATH"] = ":".join(sys.path)
-
-@app.route("/debug")
-def debug () :
-    import sys, json
-    return json.dumps({"sys.path" : list(sys.path),
-                       "os.environ" : ENV,
-                       "python3 env" : subprocess.check_output(
-                           ["python3", "-c",
-                            "import os, sys; print(sys.path, os.environ)"],
-                           encoding="utf-8",
-                           env=ENV)})
 
 ##
 ## asynchronous API for long running tasks
@@ -94,11 +92,10 @@ def before_first_request () :
     def clean_old_tasks () :
         global tasks
         while True :
+            time.sleep(60)
             five_min_ago = datetime.timestamp(datetime.utcnow()) - 5 * 60
             tasks = {task_id : task for task_id, task in tasks.items()
-                     if "completion_timestamp" not in task
-                     or task["completion_timestamp"] > five_min_ago}
-            time.sleep(60)
+                     if task.get("completion_timestamp", five_min_ago) < five_min_ago}
     thread = threading.Thread(target=clean_old_tasks)
     thread.start()
 
@@ -124,7 +121,7 @@ def async_api (wrapped_function) :
                 finally :
                     now = datetime.timestamp(datetime.utcnow())
                     tasks[task_id]["completion_timestamp"] = now
-        task_id = uuid.uuid4().hex
+        task_id = secrets.token_urlsafe()
         tasks[task_id] = {"task_thread" :
                           threading.Thread(target=task_call,
                                            args=(current_app._get_current_object(),
@@ -188,7 +185,7 @@ def index () :
     entry.extend([form["student"],
                   now.strftime("%Y-%m-%d"),
                   now.strftime("%H:%M:%S.%f")])
-    base = pathlib.Path("upload").joinpath(*entry)
+    base = UPLOAD.joinpath(*entry)
     form["base"] = str(base)
     base /= "src"
     base.mkdir(parents=True, exist_ok=True)
@@ -206,14 +203,8 @@ _result_icons = {"fail" : "delete",
                  "warn" : "info",
                  "pass" : "check"}
 
-@app.route("/result")
-@async_api
-def result () :
-    script = pathlib.Path(session["form"]["path"])
-    project = pathlib.Path(session["form"]["base"])
-    subprocess.run(["python3", "-m", "badass", "run", script, project],
-                   env=ENV)
-    with zipfile.ZipFile(project / "report.zip") as zf :
+def load_report (path) :
+    with zipfile.ZipFile(path / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
         for test in report :
@@ -222,7 +213,34 @@ def result () :
             test["icon"] = _result_icons[test["status"]]
             for key in ("text", "html") :
                 test[key] = Markup(test[key])
-    return render_template("result.html", report=report)
+    return report
+
+@app.route("/result")
+@async_api
+def result () :
+    script = pathlib.Path(session["form"]["path"])
+    project = pathlib.Path(session["form"]["base"])
+    subprocess.run(["python3", "-m", "badass", "run", script, project],
+                   env=ENV)
+    report = load_report(project)
+    while True :
+        try :
+            link = PERMALINK / secrets.token_urlsafe()
+            os.symlink(project.absolute(), link)
+            break
+        except FileExistsError :
+            pass
+    with (project / "permalink").open("w") as out :
+        out.write(link.name)
+    return render_template("result.html", report=report,
+                           permalink=url_for("permalink", name=str(link.name)))
+
+@app.route("/permalink/<name>")
+def permalink (name) :
+    report = load_report(pathlib.Path(PERMALINK) / name)
+    link = (pathlib.Path(PERMALINK) / name / "permalink").read_text()
+    return render_template("result.html", report=report,
+                           permalink=url_for("permalink", name=link))
 
 ##
 ## teachers interface
@@ -235,19 +253,29 @@ def teacher () :
     # check form content
     form = dict(request.form)
     try :
-        who = teachers[form.pop("login")]
+        who = teachers[form["login"]]
         assert teachers.auth(who.login, form.pop("password"))
     except :
         flash("indentifiant ou mot de passe incorrect", "error")
         return redirect(url_for("teacher"))
     # process validated query
-    session["search"] = {"course" : form["Course"],
-                         "group" : form[form["Course"]],
-                         "exercise" : request.form.getlist("exercise")}
+    session["form"] = form
     return redirect(url_for("report"))
 
 @app.route("/report")
 @async_api
 def report () :
-    search = session["search"]
-    return search
+    form = session["form"]
+    entry = [form["Course"]]
+    while entry[-1] in form :
+        entry.append(form[entry[-1]])
+    group = entry.pop(-1)
+    entry.append(form["exercise"])
+    base = UPLOAD.joinpath(*entry)
+    now = datetime.now().strftime("%Y-%m-%d---%H-%M-%S")
+    path = UPLOAD / form["login"] / f"{group}---{now}.zip"
+    path.parent.mkdir(exist_ok=True, parents=True)
+    subprocess.check_output(["python3", "-m", "badass", "report",
+                             "-p", path, "-b", base] + students.groups[group],
+                            env=ENV)
+    return send_file(path, as_attachment=True, attachment_filename=path.name)
