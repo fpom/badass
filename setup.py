@@ -1,19 +1,26 @@
-import ast
-from os import path
+import ast, pathlib
 from setuptools import setup, find_packages
 
-here = path.abspath(path.dirname(__file__))
+here = pathlib.Path(__file__).parent.absolute()
+long_description = (here / "README.md").read_text(encoding="utf-8")
 
-with open(path.join(here, "README.md"), encoding="utf-8") as f:
-    long_description = f.read()
+for line in (here / "badass" / "__init__.py").read_text(encoding="utf-8").splitlines() :
+    if line.startswith("version =") :
+        version = ast.literal_eval(line.split("=")[-1].strip())
+        break
+else :
+    raise Exception("could not find version")
 
-with open(path.join(here, "badass", "__init__.py"), encoding="utf-8") as f :
-    for line in f :
-        if line.startswith("version =") :
-            version = ast.literal_eval(line.split("=")[-1].strip())
-            break
-    else :
-        raise Exception("could not find version")
+def walk (path=None) :
+    if path is None :
+        path = pathlib.Path("badass")
+    for child in path.iterdir() :
+        if child.is_dir() :
+            if child.name != "__pycache__" :
+                yield from walk(child)
+        elif child.is_file() and child.suffix in (".yaml", ".svg", ".ico", ".gif", ".png",
+                                                  ".js", ".css", ".html", ".map") :
+            yield str(child)
 
 setup(name="not-so-badass",
       version=version,
@@ -31,6 +38,14 @@ setup(name="not-so-badass",
                    "Operating System :: OS Independent"],
       packages=find_packages(where="."),
       python_requires=">=3.7",
-      install_requires=[],
-      package_data={},
+      install_requires=["flask",
+                        "PyYAML",
+                        "Headers-as-Dependencies",
+                        "pandas",
+                        "openpyxl",
+                        "markdown",
+                        "pexpect",
+                        "jsonpath-ng",
+                        "bs4"],
+      package_data={"" : list(walk())},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
