@@ -1,7 +1,5 @@
 import subprocess, json, io, re, collections, pathlib
 
-from itertools import count
-
 from ...run.queries import query
 from ... import encoding, tree, recode
 
@@ -77,7 +75,10 @@ class Source (object) :
             for line in source.splitlines(keepends=True) :
                 if line.startswith("//signature ") :
                     name = line.split(None, 1)[-1].strip()
-                    out.write(self.sig[name][0][1] + ";\n")
+                    try :
+                        out.write(self.sig[name][0][1] + ";\n")
+                    except :
+                        out.write(f"//missing signature for {name}\n")
                 else :
                     out.write(line)
         self.parse(path)

@@ -17,11 +17,10 @@ def walk (path, root=None,
         elif child.is_file() and child.suffix.lstrip(".").lower() in collect :
             yield child.relative_to(root)
 
-makefile_src = r"""serve: static/index.js static/teacher.js
-	FLASK_APP=badass.www.server \
-	WERKZEUG_DEBUG_PIN=off \
-	FLASK_ENV=development \
-	flask run --no-reload
+makefile_src = r"""all: static/index.js static/teacher.js
+
+serve: all
+	badass www -s --no-pin
 
 static/%.js: forms/%.yaml
 	badass www -f $< -o $@
