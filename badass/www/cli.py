@@ -1,4 +1,4 @@
-import argparse, sys, pathlib
+import argparse, sys, pathlib, subprocess, os
 
 def add_arguments (sub) :
     excl = sub.add_mutually_exclusive_group(required=True)
@@ -32,7 +32,14 @@ def add_arguments (sub) :
                        help="log changed password to LOG (default: stdout)")
     #
     excl.add_argument("-s", "--serve", default=False, action="store_true",
-                       help="start server")
+                       help="start Flask server")
+    group = sub.add_argument_group("Flask options")
+    group.add_argument("--no-pin", default=False, action="store_true",
+                       help="disable online debugger PIN")
+    group.add_argument("--env", default="development", type=str,
+                       help="Flask environ (default: development)")
+    group.add_argument("--reload", default=False, action="store_true",
+                       help="enable Flask auto reload")
 
 def main (args) :
     "www server and utilities"
@@ -48,6 +55,14 @@ def main (args) :
         from .mkpass import mkpass
         mkpass(args.passwd, args.user or None, args.read, args.default, args.log)
     elif args.serve :
-        print("serve", args)
+        env = dict(os.environ)
+        env["FLASK_APP"] = "badass.www.server"
+        env["FLASK_ENV"] = args.env
+        if args.no_pin :
+            env["WERKZEUG_DEBUG_PIN"] = "off"
+        argv = ["flask", "run"]
+        if not args.reload :
+            argv.append("--no-reload")
+        subprocess.run(argv, env=env)
     else :
         raise RuntimeError("unreachable code has been reached")
