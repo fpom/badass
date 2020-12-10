@@ -11,16 +11,21 @@ for line in (here / "badass" / "__init__.py").read_text(encoding="utf-8").splitl
 else :
     raise Exception("could not find version")
 
+root = pathlib.Path("badass")
+
 def walk (path=None) :
     if path is None :
-        path = pathlib.Path("badass")
+        path = root
     for child in path.iterdir() :
         if child.is_dir() :
             if child.name != "__pycache__" :
                 yield from walk(child)
-        elif child.is_file() and child.suffix in (".yaml", ".svg", ".ico", ".gif", ".png",
-                                                  ".js", ".css", ".html", ".map") :
-            yield str(child)
+        elif (child.is_file()
+              and child.suffix in (".bad", ".yaml", ".svg", ".ico", ".gif", ".png",
+                                   ".js", ".css", ".html", ".map", ".csv")) :
+            yield str(child.relative_to(root))
+
+data = list(walk())
 
 setup(name="not-so-badass",
       version=version,
@@ -47,5 +52,5 @@ setup(name="not-so-badass",
                         "pexpect",
                         "jsonpath-ng",
                         "bs4"],
-      package_data={"" : list(walk())},
+      package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})

@@ -1,18 +1,14 @@
 import sys, tempfile
 
-import pandas as pd
-
 from collections import namedtuple
 from zipfile import ZipFile, ZIP_STORED, ZIP_LZMA
 from pathlib import Path
 from io import StringIO
 from csv import DictReader, DictWriter
 
-from openpyxl import Workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import PatternFill, Alignment
-
 from .. import encoding
+
+pd = Workbook = dataframe_to_rows = PatternFill = Alignment = None
 
 submission = namedtuple("submission", ["student", "exercise", "date", "path"])
 
@@ -22,6 +18,13 @@ _test = {"pass" : 0,
 
 class Report (object) :
     def __init__ (self, base, students) :
+        # only load if necessary to speedup prog startup
+        global pd, Workbook, dataframe_to_rows, PatternFill, Alignment
+        import pandas as pd
+        from openpyxl import Workbook
+        from openpyxl.utils.dataframe import dataframe_to_rows
+        from openpyxl.styles import PatternFill, Alignment
+        #
         self.todo = []
         root = base.parent
         for path in self._walk(base, students) :

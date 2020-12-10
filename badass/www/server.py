@@ -1,5 +1,5 @@
-import hashlib, collections, time, pathlib, csv, threading, subprocess, \
-    zipfile, json, secrets, os, sys
+import collections, time, pathlib, csv, threading, subprocess, \
+    zipfile, json, secrets, os, sys, mimetypes
 
 from datetime import datetime
 from functools import wraps
@@ -8,6 +8,8 @@ from flask import Flask, abort, current_app, request, url_for, render_template, 
     flash, redirect, session, Markup, Response, send_file
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
+
+from .mkpass import salthash
 
 ##
 ##
@@ -19,13 +21,14 @@ ENV["PYTHONPATH"] = ":".join(sys.path)
 UPLOAD = pathlib.Path("upload")
 PERMALINK = pathlib.Path("permalink")
 
+TEMPLATES = pathlib.Path("templates")
+if not all ((TEMPLATES / tpl).exists() for tpl in
+            ("index.html", "result.html", "style.css", "teacher.html", "wait.html")) :
+    TEMPLATES = str(pathlib.Path(__file__).parent / "templates")
+
 ##
 ## users management
 ##
-
-def salthash (s, p) :
-    salted = (s + p).encode("utf-8")
-    return hashlib.sha512(salted).hexdigest()
 
 class UserDB (object) :
     def __init__ (self, path) :
@@ -76,7 +79,7 @@ teachers = UserDB("data/teachers.csv")
 ## flask app starts here
 ##
 
-app = Flask("badass-online")
+app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
 
 ##
@@ -143,14 +146,33 @@ def gettaskstatus (task_id) :
     return task["return_value"]
 
 ##
-## CSS & JS
+## static assets
 ##
 
-@app.route("/assets/style.css")
-def css () :
-    resp = Response(render_template("style.css"), status=200, mimetype="text/css")
-    resp.headers["Content-Type"] = "text/css; charset=utf-8"
-    return resp
+DATADIR = pathlib.Path(__file__).parent
+STATIC = DATADIR / "static"
+
+@app.route("/<kind>/<path:name>")
+def asset (kind, name) :
+    mime, _ = mimetypes.guess_type(name)
+    if mime is None :
+        mime = "application/octet-stream"
+    if kind == "t" :
+        resp = Response(render_template(name), status=200, mimetype=mime)
+        resp.headers["Content-Type"] = f"{mime}; charset=utf-8"
+        return resp
+    elif kind == "s" :
+        if mime.startswith("text/") :
+            data = (STATIC / name).read_text(encoding="utf-8")
+            resp = Response(data, status=200, mimetype=mime)
+            resp.headers["Content-Type"] = f"{mime}; charset=utf-8"
+        else :
+            data = (STATIC / name).read_bytes()
+            resp = Response(data, status=200, mimetype=mime)
+            resp.headers["Content-Type"] = f"{mime}"
+        return resp
+    else :
+        abort(404)
 
 ##
 ## students interface

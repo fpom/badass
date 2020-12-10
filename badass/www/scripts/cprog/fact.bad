@@ -1,0 +1,55 @@
+from badass.run import Test
+
+import random, functools, operator
+random.seed()
+
+def fact (n) :
+    return functools.reduce(operator.mul, range(2, n+1), 1)
+
+with Test("program reads an int `n` and prints the factorial of `n`") as test :
+    NUM = random.randint(5,12)
+    FACT = fact(NUM)
+    with test.run() as run :
+        run.put(NUM)
+        run.get(FACT)
+
+with Test("same test, second version") as test :
+    NUM = random.randint(5,12)
+    FACT = fact(NUM)
+    with test.run(stdin=NUM) as run :
+        test.check(str(FACT) in run.stdout,
+                   f"programme prints {FACT}")
+
+with Test("function `fact` is well defined") as test :
+    with test.any() :
+        test.has("int fact(int)")
+        test.has("unsigned int fact(unsigned int)")
+
+with Test("function `fact` is recursive or iterative") as test :
+    with test.any() :
+        test.check("fact" in test.query("$..*[?kind='FunctionDecl' & name='fact']"
+                                        "..*[?kind='CallExpr']"
+                                        "..referencedDecl.name"),
+                   "fonction is recursive")
+        test.check(test.query("$..*[?kind='FunctionDecl' & name='fact']"
+                              "..*[?kind='{LoopStmt}']"),
+                   "fonction is iterative")
+
+src = """//signature fact
+#include <assert.h>
+int main(void) {
+  assert(fact(0) == 1);
+  int f = 1;
+  for (int i=1; i<13; i++) {
+    f *= i;
+    assert(fact(i) == f);
+  }
+}
+"""
+
+with Test("function `fact` computed factorial") as test :
+    test.del_source("main")
+    test.add_source(src)
+    with test.run() as run :
+        test.check(run.exit_code == 0,
+                   "check `fact(n)` for many `n`")

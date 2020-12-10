@@ -118,18 +118,3 @@ class Loader (object) :
                 yield f'<{tag} {html}>{text}</{tag}>'
             else :
                 yield f'<{tag} {html}>'
-
-if __name__ == "__main__" :
-    import argparse, sys
-    parser = argparse.ArgumentParser("genform")
-    parser.add_argument("-o", "--output", metavar="PATH",
-                        type=argparse.FileType(mode="w", encoding="utf-8"),
-                        default=sys.stdout,
-                        help="output JS to PATH")
-    parser.add_argument("input", metavar="PATH",
-                        type=argparse.FileType(mode="r", encoding="utf-8"),
-                        help="input YAML from PATH")
-    args = parser.parse_args()
-    loader = Loader()
-    form = loader.load(args.input)
-    form(args.output)

@@ -73,17 +73,17 @@ form label {
 }
 
 ul .result-fail {
-    list-style-image: url("{{ url_for('static', filename='fail.svg') }}");
+    list-style-image: url("{{ url_for('asset', kind='s', name='fail.svg') }}");
     color: #900;
 } 
 
 ul .result-warn {
-    list-style-image: url("{{ url_for('static', filename='warn.svg') }}");
+    list-style-image: url("{{ url_for('asset', kind='s', name='warn.svg') }}");
     color: #C60;
 } 
 
 ul .result-pass {
-    list-style-image: url("{{ url_for('static', filename='pass.svg') }}");
+    list-style-image: url("{{ url_for('asset', kind='s', name='pass.svg') }}");
     color: #090;
 }
 
@@ -93,9 +93,9 @@ li.lang {
 }
 
 li.lang-en {
-    list-style-image: url("{{ url_for('static', filename='flags/en.png') }}");
+    list-style-image: url("{{ url_for('asset', kind='s', name='flags/en.png') }}");
 }
 
 li.lang-fr {
-    list-style-image: url("{{ url_for('static', filename='flags/fr.png') }}");
+    list-style-image: url("{{ url_for('asset', kind='s', name='flags/fr.png') }}");
 }

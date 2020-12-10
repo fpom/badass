@@ -2,9 +2,9 @@ import io, json, csv
 
 from zipfile import ZipFile, ZIP_LZMA, ZIP_STORED
 
-from bs4 import BeautifulSoup
-
 from .. import tree, md
+
+BeautifulSoup = None
 
 class Tag (object) :
     def __init__ (self, html, name) :
@@ -40,6 +40,10 @@ class HTML (object) :
 
 class Report (object) :
     def __init__ (self, project, tests) :
+        # only load if necessary to speedup prog startup
+        global BeautifulSoup
+        from bs4 import BeautifulSoup
+        #
         self.project_dir = project
         self.tests = tests
         self._csv = io.StringIO()

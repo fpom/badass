@@ -1,4 +1,4 @@
-import argparse, sys
+import argparse, sys, pathlib
 
 def add_arguments (sub) :
     excl = sub.add_mutually_exclusive_group(required=True)
@@ -11,6 +11,12 @@ def add_arguments (sub) :
                        type=argparse.FileType(mode="w", encoding="utf-8"),
                        default=sys.stdout,
                        help="output to PATH (default: stdout)")
+    #
+    excl.add_argument("-i", "--init", default=None, const=".", nargs="?", metavar="PATH",
+                      help="copy static files to directory PATH (default: .)")
+    group = sub.add_argument_group("static files init options")
+    group.add_argument("-c", "--clobber", default=False, action="store_true",
+                       help="replace existing files")
     #
     excl.add_argument("-p", "--passwd", type=str, metavar="CSV",
                       help="password CSV database")
@@ -30,4 +36,18 @@ def add_arguments (sub) :
 
 def main (args) :
     "www server and utilities"
-    print("www", args)
+    if args.form is not None :
+        from .genform import Loader
+        loader = Loader()
+        form = loader.load(args.form)
+        form(args.output)
+    elif args.init is not None :
+        from . import copy_static
+        copy_static(pathlib.Path(args.init), args.clobber)
+    elif args.passwd is not None :
+        from .mkpass import mkpass
+        mkpass(args.passwd, args.user or None, args.read, args.default, args.log)
+    elif args.serve :
+        print("serve", args)
+    else :
+        raise RuntimeError("unreachable code has been reached")

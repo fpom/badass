@@ -7,7 +7,8 @@ from functools import wraps
 from tempfile import mkstemp, mkdtemp
 from json import JSONEncoder as _JSONEncoder
 from pathlib import Path
-from markdown import markdown
+
+markdown = None
 
 class tree (dict) :
     def __getattr__ (self, key) :
@@ -73,6 +74,10 @@ def recode (path) :
         out.write(src)
 
 def md (text, inline=True) :
+    # only load if necessary to speedup prog startup
+    global markdown
+    from markdown import markdown
+    #
     try :
         html = markdown(str(text))
         if inline :
