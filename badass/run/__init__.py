@@ -181,20 +181,21 @@ class Test (_Test) :
     def query (self, pattern) :
         return [found for expr in expand(pattern, self.lang)
                 for found in query(expr, self.lang.source.ast)]
-    def run (self, stdin=None, eol=True) :
-        return Run(self, stdin, eol)
+    def run (self, stdin=None, eol=True, timeout=None) :
+        return Run(self, stdin, eol, timeout)
 
 ##
 ##
 ##
 
 class Run (_AllTest) :
-    def __init__ (self, test, stdin=None, eol=True) :
+    def __init__ (self, test, stdin=None, eol=True, timeout=None) :
         if stdin :
             text = f"build and execute program with input `{mdesc(stdin)}`"
         else :
             text = f"build and execute program"
         super().__init__(test, text=text)
+        self.timeout = timeout or CONFIG.timeout
         self.stdin = stdin
         self.eol = eol
         self._exit_code = None
@@ -257,22 +258,29 @@ class Run (_AllTest) :
         try :
             self.log.write("terminate: closing\n")
             self.process.close(force=False)
-            sleep(CONFIG.timeout)
+            sleep(self.timeout)
             if self.process.isalive() :
                 self.log.write(f"terminate: force-closing\n")
                 self.process.close(force=True)
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
-        self._exit_code = self.process.exitstatus
+        try :
+            self.process.logfile_read.close()
+        except Exception as err :
+            self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
+        try :
+            self.log.close()
+        except :
+            pass
+        if self.test.lang.exit_code :
+            self._exit_code = self.test.lang.exit_code
+        else :
+            self._exit_code = self.process.exitstatus
         self._signal = self.process.signalstatus
     @cached_property
     def stdout (self) :
         self.terminate()
         return self.stdout_log.read_text(**encoding)
-    @cached_property
-    def stderr (self) :
-        self.terminate()
-        return self.stderr_log.read_text(**encoding)
     @cached_property
     def exit_code (self) :
         self.terminate()
@@ -284,7 +292,6 @@ class Run (_AllTest) :
     @cached_property
     def process (self) :
         self.stdout_log = self.test.add_path(name="stdout.log", log="run")
-        self.stderr_log = self.test.add_path(name="stderr.log", log="run")
         self.make_sh = self.test.add_path(prefix="make-", suffix=".sh")
         self.test.more_files["src/make.sh"] = self.make_sh
         self.test.lang.make_script(self.make_sh)
@@ -292,7 +299,7 @@ class Run (_AllTest) :
                               ["--quiet", "--allow-debuggers", "--private=.",
                                "/bin/bash", self.make_sh.name],
                               cwd=str(self.test.test_dir),
-                              timeout=CONFIG.timeout,
+                              timeout=self.timeout,
                               echo=False,
                               encoding=encoding.encoding,
                               codec_errors=encoding.errors,

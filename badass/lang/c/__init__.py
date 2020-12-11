@@ -43,8 +43,6 @@ class Language (BaseLanguage) :
                 script.write(f"mkdirhier {self[self.test.log_dir / sub]}\n")
             self.pid = self.test.add_path(name="make.pid", log="build")
             script.write(f"echo $$ > {self[self.pid]}\n")
-            self.env = self.test.add_path(name="make.env", log="build")
-            script.write(f"env >> {self[self.env]}\n")
             # compile sources
             lflags = set()
             obj_files = []
@@ -83,10 +81,17 @@ class Language (BaseLanguage) :
             drmem = (f"drmemory -quiet -logdir {self[self.mem]}"
                      " -callstack_srcfile_prefix $(pwd) --")
             err = self.test.add_path(name=f"run.stderr", log="run")
-            ret = self.test.add_path(name=f"run.status", log="run")
+            ret = self._ret = self.test.add_path(name=f"run.status", log="run")
             script.write(f"{drmem} ./a.out 2> {self[err]}\n"
                          f"echo $? > {self[ret]}\n"
                          f"exit 0")
+    @property
+    def exit_code (self) :
+        ret = self._ret.read_text(**encoding).strip()
+        try :
+            return int(ret)
+        except :
+            return ret
     def report_build (self) :
         for action, path, cmd, stdio in self.log :
             retcode = stdio.exit_code.read_text(encoding="utf-8").strip()
