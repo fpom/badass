@@ -11,3 +11,4 @@ __pycache__
 /dist
 a.out
 /test
+/tmp

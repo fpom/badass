@@ -1,4 +1,4 @@
-import json
+import json, os
 
 from pathlib import Path
 from shutil import copytree, rmtree
@@ -289,13 +289,15 @@ class Run (_AllTest) :
         self.test.more_files["src/make.sh"] = self.make_sh
         self.test.lang.make_script(self.make_sh)
         child = pexpect.spawn("firejail",
-                              ["--quiet", "--allow-debuggers",
+                              ["--quiet", "--allow-debuggers", "--private=.",
                                "/bin/bash", self.make_sh.name],
                               cwd=str(self.test.test_dir),
                               timeout=CONFIG.timeout,
                               echo=False,
                               encoding=encoding.encoding,
-                              codec_errors=encoding.errors)
+                              codec_errors=encoding.errors,
+                              env={var : os.environ[var] for var in
+                                   ("PATH", "TERM", "LC_ALL")})
         child.logfile_read = self.stdout_log.open("w", **encoding)
         if self.stdin is not None :
             if self.eol :

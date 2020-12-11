@@ -8,6 +8,7 @@ from ... import tree, encoding, cached_property, mdesc
 from ...run import PASS, WARN, FAIL
 from .drmem import parse as drparse
 from .srcio import Source
+from .gcc import GCCout
 
 class Language (BaseLanguage) :
     SUFFIX = ".c"
@@ -15,6 +16,7 @@ class Language (BaseLanguage) :
     DESCRIPTION = "C11 (ISO/IEC 9899:2011)"
     MACROS = {"LoopStmt" : ("ForStmt", "WhileStmt", "DoStmt"),
               "CondStmt" : ("IfStmt", "SwitchStmt")}
+    IGNORE = {"ISO C does not support the 'm' scanf flag"}
     def __init__ (self, test) :
         super().__init__(test)
         self.log = []
@@ -37,8 +39,12 @@ class Language (BaseLanguage) :
         return quote(str(path))
     def make_script (self, path) :
         with path.open("w", **encoding) as script :
-            self.pid = self.test.add_path(name=f"make.pid", log="build")
+            for sub in ("build", "run", "memchk") :
+                script.write(f"mkdirhier {self[self.test.log_dir / sub]}\n")
+            self.pid = self.test.add_path(name="make.pid", log="build")
             script.write(f"echo $$ > {self[self.pid]}\n")
+            self.env = self.test.add_path(name="make.env", log="build")
+            script.write(f"env >> {self[self.env]}\n")
             # compile sources
             lflags = set()
             obj_files = []
@@ -86,19 +92,24 @@ class Language (BaseLanguage) :
             retcode = stdio.exit_code.read_text(encoding="utf-8").strip()
             details = io.StringIO()
             details.write(f"`$ {cmd}` (returned {retcode})")
-            output = False
             for key in ("stdout", "stderr") :
                 txt = stdio[key].read_text(**encoding).rstrip()
                 if txt :
-                    details.write(f"<br>\n**{key}:**<br>\n```\n{txt}\n```")
-                    output = True
+                    details.write(f"<br>\n**{key}:**<br>\n<pre>{txt}</pre>")
             if retcode != "0" :
                 stat = FAIL
-            elif action in ("compile", "link") and output :
-                stat = WARN
+            elif action in ("compile", "link") :
+                gcc = GCCout(self.IGNORE)
+                gcc.parse(stdio.stdout.read_text(**encoding))
+                gcc.parse(stdio.stderr.read_text(**encoding))
+                if gcc.error_count() :
+                    stat = FAIL
+                elif gcc.warning_count() :
+                    stat = WARN
+                else :
+                    stat = PASS
             else :
                 stat = PASS
-                details = io.StringIO()
             yield stat, f"{action} `{path}`", details.getvalue()
     def report_memchk (self) :
         memchk = {}
