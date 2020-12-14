@@ -1,14 +1,12 @@
-import io
+import io, json, sys
 
 from shlex import quote
 from hadlib import getopt
 
 from .. import BaseLanguage
 from ... import tree, encoding, cached_property, mdesc
-from ...run import PASS, WARN, FAIL
 from .drmem import parse as drparse
 from .srcio import Source
-from .gcc import GCCout
 
 class Language (BaseLanguage) :
     SUFFIX = ".c"
@@ -62,7 +60,7 @@ class Language (BaseLanguage) :
                        f" -Wall -Wpedantic"
                        f" {' '.join(cf)} {self[path]} -o {self[obj]}")
                 script.write(f"rm -f {self[obj]}\n"
-                             f"{gcc} > {self[out]} 2> {self[err]}\n"
+                             f"{gcc} -fdiagnostics-format=json > {self[out]} 2> {self[err]}\n"
                              f"echo $? > {self[ret]}\n")
                 self.log.append(["compile", self[path], gcc,
                                  tree(stdout=out, stderr=err, exit_code=ret)])
@@ -94,28 +92,32 @@ class Language (BaseLanguage) :
             return ret
     def report_build (self) :
         for action, path, cmd, stdio in self.log :
-            retcode = stdio.exit_code.read_text(encoding="utf-8").strip()
-            details = io.StringIO()
-            details.write(f"`$ {cmd}` (returned {retcode})")
-            for key in ("stdout", "stderr") :
-                txt = stdio[key].read_text(**encoding).rstrip()
-                if txt :
-                    details.write(f"<br>\n**{key}:**<br>\n<pre>{txt}</pre>")
-            if retcode != "0" :
-                stat = FAIL
-            elif action in ("compile", "link") :
-                gcc = GCCout(self.IGNORE)
-                gcc.parse(stdio.stdout.read_text(**encoding))
-                gcc.parse(stdio.stderr.read_text(**encoding))
-                if gcc.error_count() :
-                    stat = FAIL
-                elif gcc.warning_count() :
-                    stat = WARN
+            success = stdio.exit_code.read_text(**encoding).strip() == "0"
+            info = []
+            try :
+                diagnostics = json.loads(stdio.stderr.read_text(**encoding))
+            except :
+                diagnostics = []
+            for diag in diagnostics :
+                if diag["kind"] == "warning" and diag["message"] in self.IGNORE :
+                    kind = "info"
                 else :
-                    stat = PASS
-            else :
-                stat = PASS
-            yield stat, f"{action} `{path}`", details.getvalue()
+                    kind = diag["kind"]
+                pos = tree(line=sys.maxsize, path=None, col=sys.maxsize)
+                for loc in diag["locations"] :
+                    for key in ("start", "caret") :
+                        if key in loc :
+                            if loc[key]["line"] < pos.line :
+                                pos = tree(line=loc[key]["line"],
+                                           path=loc[key]["file"],
+                                           col=loc[key]["column"])
+                            elif loc[key]["line"] == pos.line :
+                                pos.col = min(pos.col, loc[key]["column"])
+                line = self.source[pos.path, pos.line-1]
+                info.append((kind, diag["message"], pos,
+                             line[:pos.col].decode(**encoding),
+                             line[pos.col:].decode(**encoding)))
+            yield success, f"{action} `{path}`", f"`$ {cmd}`", info
     def report_memchk (self) :
         memchk = {}
         for path in self.mem.glob("DrMemory*/results.txt") :
@@ -129,4 +131,4 @@ class Language (BaseLanguage) :
                 for n, frame in enumerate(info.stack) :
                     details.write(f" {n+1}. function `{frame.function}`"
                                   f" (file `{frame.path}`, line `{frame.line}`)\n")
-                yield WARN, f"{mdesc(info.description)}", details.getvalue()
+                yield True, f"{mdesc(info.description)}", details.getvalue(), None

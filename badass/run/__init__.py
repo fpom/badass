@@ -188,6 +188,10 @@ class Test (_Test) :
 ##
 ##
 
+_diag2status = {"info" : PASS,
+                "warning" : WARN,
+                "error" : FAIL}
+
 class Run (_AllTest) :
     def __init__ (self, test, stdin=None, eol=True, timeout=None) :
         if stdin :
@@ -207,12 +211,24 @@ class Run (_AllTest) :
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         self_checks, self.checks = self.checks, []
-        for text, name in (("compile and link", "build"),
+        for title, name in (("compile and link", "build"),
                            ("memory safety checks", "memchk")) :
             checks = list(getattr(self.test.lang, f"report_{name}")())
-            with _AllTest(self, text=text) as test :
-                for status, text, details in checks :
-                    test.add(status, text, details, auto=True)
+            with _AllTest(self, text=title) as test :
+                for status, text, details, info in checks :
+                    if info :
+                        with _AllTest(test, text=text, details=details) as sub :
+                            for diag, message, pos, before, after in info :
+                                sub.add(_diag2status[diag],
+                                        text=(f"`[{pos.path}:{pos.line}:{pos.col}]`"
+                                              f" {message}"),
+                                        details=(f"`{before.replace(' ', '§')}`"
+                                                 f"**`{after.replace(' ', '§')}`**"),
+                                        auto=True)
+                    elif name == "memchk" :
+                        test.add(WARN, text, details, auto=True)
+                    else :
+                        test.add(PASS if status else FAIL, text, details, auto=True)
         self.checks.extend(self_checks)
         super().__exit__(exc_type, exc_val, exc_tb)
     def get (self, text) :

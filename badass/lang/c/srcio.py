@@ -15,6 +15,7 @@ class Source (object) :
         self.ast = {}
         self.obj = {}
         self.sig = collections.defaultdict(list)
+        self.src = {}
         for path in source_files :
             if path.match("*.[ch]") :
                 recode(path)
@@ -49,6 +50,12 @@ class Source (object) :
             t = tidy(decl["type"]["qualType"])
             self.obj[n] = self.obj[t] = (_path, tree(decl))
             self.sig[t].append((_path, n))
+    def __getitem__ (self, loc) :
+        path, line = loc
+        if path not in self.src :
+            _path = self.base_dir / path
+            self.src[path] = tuple(l.rstrip(b"\n\r") for l in _path.open("rb"))
+        return self.src[path][line]
     def __iter__ (self) :
         for path in self.ast :
             yield pathlib.Path(path)

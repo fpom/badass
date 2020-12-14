@@ -4,8 +4,6 @@ from zipfile import ZipFile, ZIP_LZMA, ZIP_STORED
 
 from .. import tree, md
 
-BeautifulSoup = None
-
 class Tag (object) :
     def __init__ (self, html, name) :
         self._html = html
@@ -34,16 +32,10 @@ class HTML (object) :
     def write (self, text) :
         self._out.write(text)
     def getvalue (self) :
-        tree = BeautifulSoup(self._out.getvalue(), features="lxml")
-        html = tree.prettify().splitlines()
-        return "\n".join(html[2:-2])
+        return self._out.getvalue()
 
 class Report (object) :
     def __init__ (self, project, tests) :
-        # only load if necessary to speedup prog startup
-        global BeautifulSoup
-        from bs4 import BeautifulSoup
-        #
         self.project_dir = project
         self.tests = tests
         self._csv = io.StringIO()

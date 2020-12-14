@@ -82,9 +82,9 @@ def md (text, inline=True) :
         html = markdown(str(text))
         if inline :
             html = html.replace("<p>", "").replace("</p>", "")
-        return html
+        return html.replace("§", "&nbsp;")
     except :
-        return text
+        return text.replace("§", " ")
 
 _esc = {c : f"\\{c}" for c in r"\`*_{}[]()#+-.!"}
 
