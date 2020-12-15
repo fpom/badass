@@ -2,7 +2,9 @@ import runpy
 import badass.run
 
 def add_arguments (sub) :
-    sub.add_argument("-t", "--timeout", default=1, type=int,
+    sub.add_argument("-k", "--keep", default=False, action="store_true",
+                     help="do not remove files after building the archives")
+    sub.add_argument("-t", "--timeout", default=2, type=int,
                      help="timeout for I/O with child process")
     sub.add_argument("script", type=str,
                      help="path to script")

@@ -153,7 +153,8 @@ class Test (_Test) :
                     zf.write(src, tgt)
                 for path in self._walk(self.log_dir) :
                     zf.write(path, Path("log") / path.relative_to(self.log_dir))
-        rmtree(self.test_dir, ignore_errors=True)
+        if not CONFIG.keep :
+            rmtree(self.test_dir, ignore_errors=True)
         self.TESTS.append(test_zip)
     def add_path (self, log=None, name=None, **args) :
         if log is True :
@@ -210,6 +211,7 @@ class Run (_AllTest) :
         self.log = self.log_path.open("w", **encoding)
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
+        self.terminate()
         self_checks, self.checks = self.checks, []
         for title, name in (("compile and link", "build"),
                            ("memory safety checks", "memchk")) :
