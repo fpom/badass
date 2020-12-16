@@ -51,7 +51,6 @@ setup(name="not-so-badass",
                         "openpyxl",
                         "markdown",
                         "pexpect",
-                        "jsonpath-ng",
-                        "bs4"],
+                        "jsonpath-ng"],
       package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
