@@ -43,9 +43,17 @@
       {% endif %}
     </div>
     <script>
-      setTimeout(function() {
-          window.location.href = "{{ status_url }}";
-      }, {{ status_wait }});
+      function penelope () {
+          $.getJSON("{{ status_url }}", function (status) {
+              $("#log").append("<li><code>" + status.wait + "/" + status.link + "</code></li>");
+              if (status.wait) {
+                  setTimeout(penelope, 1000);
+              } else {
+                  window.location.href = status.link;
+              }
+          })
+      }
+      setTimeout(penelope, 2000);
     </script>
   </body>
-</html> 
+</html>

@@ -11,6 +11,8 @@ from werkzeug.exceptions import HTTPException, InternalServerError
 
 from .mkpass import salthash
 
+random.seed()
+
 ##
 ##
 ##
@@ -19,7 +21,7 @@ ENV = dict(os.environ)
 ENV["PYTHONPATH"] = ":".join(sys.path)
 
 UPLOAD = pathlib.Path("upload")
-PERMALINK = pathlib.Path("permalink")
+REPORT = pathlib.Path("reports")
 
 TEMPLATES = pathlib.Path("templates")
 if not all ((TEMPLATES / tpl).exists() for tpl in
@@ -111,11 +113,6 @@ def before_first_request () :
     thread = threading.Thread(target=clean_old_tasks)
     thread.start()
 
-def wait_task (task_id, delay=3000) :
-    status_url = url_for("gettaskstatus", task_id=task_id)
-    return render_template("wait.html", status_url=status_url, status_wait=delay,
-                           anim=session["anim"])
-
 def async_api (wrapped_function) :
     @wraps(wrapped_function)
     def new_function (*args, **kwargs) :
@@ -140,8 +137,9 @@ def async_api (wrapped_function) :
                                            args=(current_app._get_current_object(),
                                                  request.environ))}
         tasks[task_id]["task_thread"].start()
-        session["anim"] = random.choice(ANIMS)
-        return wait_task(task_id)
+        return render_template("wait.html",
+                               status_url=url_for("gettaskstatus", task_id=task_id),
+                               anim=random.choice(ANIMS))
     return new_function
 
 @app.route("/status/<task_id>")
@@ -150,10 +148,19 @@ def gettaskstatus (task_id) :
     task = tasks.get(task_id, None)
     if task is None :
         abort(404)
-    if "return_value" not in task :
-        return wait_task(task_id)
-    session.pop("anim")
-    return task["return_value"]
+    if "return_value" in task :
+        return {"wait" : False,
+                "link" : url_for("gettaskresult", task_id=task_id)}
+    else :
+        return {"wait" : True}
+
+@app.route("/result/<task_id>")
+def gettaskresult (task_id) :
+    global tasks
+    task = tasks.get(task_id, None)
+    if task is None :
+        abort(404)
+    return task.get("return_value")
 
 ##
 ## static assets
@@ -200,11 +207,11 @@ def index () :
         who = students[form["student"]]
         assert students.auth(who.num, form.pop("password"))
     except :
-        errors.append("numéro d'étudiant ou mot de passe incorrect")
+        errors.append("invalid student's number or password")
     if form.pop("consent", None) != "on" :
-        errors.append("vous devez certifier votre identité")
+        errors.append("you must certify your identity")
     if not request.files.getlist("source") :
-        errors.append("fichier(s) source(s) manquant(s)")
+        errors.append("missing source files(s)")
     if errors :
         for msg in errors :
             flash(msg, "error")
@@ -237,8 +244,14 @@ _result_icons = {"fail" : "delete",
                  "warn" : "info",
                  "pass" : "check"}
 
-def load_report (path) :
-    with zipfile.ZipFile(path / "report.zip") as zf :
+@app.route("/result")
+@async_api
+def result () :
+    script = pathlib.Path(session["form"]["path"])
+    project = pathlib.Path(session["form"]["base"])
+    subprocess.run(["python3", "-m", "badass", "run", script, project],
+                   env=ENV)
+    with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
         for test in report :
@@ -247,33 +260,25 @@ def load_report (path) :
             test["icon"] = _result_icons[test["status"]]
             for key in ("text", "html") :
                 test[key] = Markup(test[key])
-    return report
+    data = render_template("result.html", report=report)
+    path = REPORT / secrets.token_urlsafe()
+    while path.exists() :
+        path = REPORT / secrets.token_urlsafe()
+    with path.open("w") as out :
+        out.write(data)
+    permalink = url_for("report", name=str(path.name), _external=True)
+    permalink_path = project / "permalink"
+    with permalink_path.open("w", encoding="utf-8") as out :
+        out.write(permalink)
+    return redirect(permalink)
 
-@app.route("/result")
-@async_api
-def result () :
-    script = pathlib.Path(session["form"]["path"])
-    project = pathlib.Path(session["form"]["base"])
-    subprocess.run(["python3", "-m", "badass", "run", script, project],
-                   env=ENV)
-    report = load_report(project)
-    while True :
-        try :
-            link = PERMALINK / secrets.token_urlsafe()
-            os.symlink(project.absolute(), link)
-            break
-        except FileExistsError :
-            pass
-    link = url_for("permalink", name=str(link.name), _external=True)
-    with (project / "permalink").open("w") as out :
-        out.write(link)
-    return render_template("result.html", report=report, permalink=link)
-
-@app.route("/permalink/<name>")
-def permalink (name) :
-    report = load_report(pathlib.Path(PERMALINK) / name)
-    link = (pathlib.Path(PERMALINK) / name / "permalink").read_text()
-    return render_template("result.html", report=report, permalink=link)
+@app.route("/report/<name>")
+def report (name) :
+    path = REPORT / name
+    if path.exists() :
+        return path.read_text(encoding="utf-8")
+    else :
+        abort(404)
 
 ##
 ## teachers interface
@@ -293,11 +298,11 @@ def teacher () :
         return redirect(url_for("teacher"))
     # process validated query
     session["form"] = form
-    return redirect(url_for("report"))
+    return redirect(url_for("marks"))
 
-@app.route("/report")
+@app.route("/marks")
 @async_api
-def report () :
+def marks () :
     form = session["form"]
     entry = [form["Course"]]
     while entry[-1] in form :

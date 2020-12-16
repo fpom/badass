@@ -8,6 +8,7 @@ pip: clean
 	make clean
 
 test:
+	make install
 	badass www -i test
 	make -C test serve
 
