@@ -322,7 +322,7 @@ class Run (_AllTest) :
                               encoding=encoding.encoding,
                               codec_errors=encoding.errors,
                               env={var : os.environ[var] for var in
-                                   ("PATH", "TERM", "LC_ALL")})
+                                   ("PATH", "TERM", "LC_ALL") if var in os.environ})
         child.logfile_read = self.stdout_log.open("w", **encoding)
         if self.stdin is not None :
             if self.eol :
