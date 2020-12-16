@@ -5,8 +5,9 @@ from secrets import token_bytes
 from .. import encoding
 
 def walk (path, root=None,
-          collect={"yaml", "csv", "bad",
+          collect={"yaml", "csv", "bad", "json",
                    "svg", "ico", "gif", "png",
+                   "mp4",
                    "html", "css", "js", "map"}) :
     if root is None :
         root = path
@@ -29,7 +30,7 @@ static/%.js: forms/%.yaml
 def copy_static (target_dir, clobber=False) :
     # directories
     for child in ("data", "forms", "permalink", "scripts", "static", "upload") :
-        (target_dir / child).mkdir(exist_ok=True)
+        (target_dir / child).mkdir(exist_ok=True, parents=True)
     # resource files
     root = Path(__file__).parent
     for path in walk(root) :
@@ -41,7 +42,7 @@ def copy_static (target_dir, clobber=False) :
             else :
                 print("skipping:", target)
                 continue
-        path.parent.mkdir(exist_ok=True, parents=True)
+        target.parent.mkdir(exist_ok=True, parents=True)
         if path.parts[0] == "templates" :
             tpl = (root / path).read_text(**encoding)
             with target.open("w", **encoding) as out :

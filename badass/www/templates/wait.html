@@ -25,6 +25,23 @@
         {% endif %}
         {% endwith %}
       </div>
+      {% if anim %}
+      <div class="wait-anim">
+        <video autoplay loop>
+          {% for src, typ in anim["media"] %}
+          <source src="{{ url_for('static', filename=src) }}" type="{{ typ }}">
+          {% endfor %}
+        </video>
+        <br>
+        <a href="{{ anim['url'] }}" target="_blank">
+          {{ anim['author'] }}
+          {% if anim.get('date') %}
+          / {{ anim['date'] }}
+          {% endif %}
+        </a>
+      </div>
+      {% endif %}
+    </div>
     <script>
       setTimeout(function() {
           window.location.href = "{{ status_url }}";

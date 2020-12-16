@@ -21,7 +21,8 @@ def walk (path=None) :
             if child.name != "__pycache__" :
                 yield from walk(child)
         elif (child.is_file()
-              and child.suffix in (".bad", ".yaml", ".svg", ".ico", ".gif", ".png",
+              and child.suffix in (".bad", ".yaml", ".json",
+                                   ".svg", ".ico", ".gif", ".png", ".mp4",
                                    ".js", ".css", ".html", ".map", ".csv")) :
             yield str(child.relative_to(root))
 

@@ -99,3 +99,24 @@ li.lang-en {
 li.lang-fr {
     list-style-image: url("{{ url_for('asset', kind='s', name='flags/fr.png') }}");
 }
+
+.wait-anim {
+    margin: auto;
+    text-align: center;
+}
+
+.wait-anim video {
+    max-width: 70%;
+}
+
+.wait-anim a {
+    color: #BBB;
+    font-size: xx-small;
+    text-decoration: none;
+}
+
+.wait-anim a:visited {
+    color: #BBB;
+    font-size: xx-small;
+    text-decoration: none;
+}

@@ -1,5 +1,5 @@
 import collections, time, pathlib, csv, threading, subprocess, \
-    zipfile, json, secrets, os, sys, mimetypes
+    zipfile, json, secrets, os, sys, mimetypes, random
 
 from datetime import datetime
 from functools import wraps
@@ -76,6 +76,13 @@ students = UserDB("data/students.csv")
 teachers = UserDB("data/teachers.csv")
 
 ##
+## waiting animations
+##
+
+ANIMS = [json.load(path.open(encoding="utf-8"))
+         for path in pathlib.Path().glob("anim/*.json")] or [None]
+
+##
 ## flask app starts here
 ##
 
@@ -106,7 +113,8 @@ def before_first_request () :
 
 def wait_task (task_id, delay=3000) :
     status_url = url_for("gettaskstatus", task_id=task_id)
-    return render_template("wait.html", status_url=status_url, status_wait=delay)
+    return render_template("wait.html", status_url=status_url, status_wait=delay,
+                           anim=session["anim"])
 
 def async_api (wrapped_function) :
     @wraps(wrapped_function)
@@ -132,6 +140,7 @@ def async_api (wrapped_function) :
                                            args=(current_app._get_current_object(),
                                                  request.environ))}
         tasks[task_id]["task_thread"].start()
+        session["anim"] = random.choice(ANIMS)
         return wait_task(task_id)
     return new_function
 
@@ -143,6 +152,7 @@ def gettaskstatus (task_id) :
         abort(404)
     if "return_value" not in task :
         return wait_task(task_id)
+    session.pop("anim")
     return task["return_value"]
 
 ##

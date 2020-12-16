@@ -7,5 +7,9 @@ pip: clean
 	python3 -m twine upload dist/*
 	make clean
 
+test:
+	badass www -i test
+	make -C test serve
+
 clean:
 	rm -rf build dist not_so_badass.egg-info
