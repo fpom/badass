@@ -5,7 +5,7 @@ from datetime import datetime
 from functools import wraps
 
 from flask import Flask, abort, current_app, request, url_for, render_template, \
-    flash, redirect, session, Markup, Response, send_file
+    flash, redirect, session, Markup, Response, send_file, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 
@@ -149,10 +149,10 @@ def gettaskstatus (task_id) :
     if task is None :
         abort(404)
     if "return_value" in task :
-        return {"wait" : False,
-                "link" : url_for("gettaskresult", task_id=task_id)}
+        return jsonify({"wait" : False,
+                        "link" : url_for("gettaskresult", task_id=task_id)})
     else :
-        return {"wait" : True}
+        return jsonify({"wait" : True})
 
 @app.route("/result/<task_id>")
 def gettaskresult (task_id) :
