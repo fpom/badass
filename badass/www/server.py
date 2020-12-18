@@ -313,7 +313,6 @@ _result_icons = {"fail" : "delete",
 @app.route("/result")
 @async_api
 def result () :
-    foo
     script = pathlib.Path(session["form"]["path"])
     project = pathlib.Path(session["form"]["base"])
     subprocess.run(["python3", "-m", "badass", "run", script, project],
