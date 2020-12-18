@@ -26,6 +26,8 @@ def salt () :
     while True :
         yield secrets.token_hex()
 
+SALT = secrets.token_hex()
+
 def salthash (s, p) :
     salted = (s + p).encode("utf-8")
     return hashlib.sha512(salted).hexdigest()

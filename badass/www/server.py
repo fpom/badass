@@ -1,15 +1,20 @@
 import collections, time, pathlib, csv, threading, subprocess, \
-    zipfile, json, secrets, os, sys, mimetypes, random
+    zipfile, json, secrets, os, sys, mimetypes, random, itertools, traceback
 
 from datetime import datetime
 from functools import wraps
+from pprint import pformat
 
 from flask import Flask, abort, current_app, request, url_for, render_template, \
     flash, redirect, session, Markup, Response, send_file, jsonify
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 
-from .mkpass import salthash
+from pygments import highlight
+from pygments.lexers import PythonLexer, PythonTracebackLexer
+from pygments.formatters import HtmlFormatter
+
+from .mkpass import salthash, SALT
 
 random.seed()
 
@@ -22,6 +27,7 @@ ENV["PYTHONPATH"] = ":".join(sys.path)
 
 UPLOAD = pathlib.Path("upload")
 REPORT = pathlib.Path("reports")
+ERROR = pathlib.Path("errors")
 
 TEMPLATES = pathlib.Path("templates")
 if not all ((TEMPLATES / tpl).exists() for tpl in
@@ -67,12 +73,12 @@ class UserDB (object) :
         return self._bykey[key]
     def auth (self, key, password) :
         self.reload()
+        row = self[key]
         if "salt" not in self.fields :
-            return self[key].password == password
+            attempt, _ = password, salthash(SALT, password)
         else :
-            row = self[key]
-            sh = salthash(row.salt, password)
-            return sh == row.password
+            _, attempt = password, salthash(row.salt, password)
+        return secrets.compare_digest(attempt, row.password)
 
 students = UserDB("data/students.csv")
 teachers = UserDB("data/teachers.csv")
@@ -90,6 +96,67 @@ ANIMS = [json.load(path.open(encoding="utf-8"))
 
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
+
+##
+## errors handling
+##
+
+def errorpath () :
+    for size in itertools.count(start=2) :
+        for i in range(10) :
+            path = ERROR / secrets.token_urlsafe(size)
+            if not path.exists() :
+                return path
+
+@app.errorhandler(Exception)
+def handle_exception (err) :
+    if not isinstance(err, HTTPException) :
+        path = errorpath()
+        name = path.name
+        with path.open("w", encoding="utf-8") as out :
+            tb = traceback.TracebackException.from_exception(err, capture_locals=True)
+            out.write("<h5>Traceback</h5>\n")
+            text = "".join(tb.format())
+            out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
+            if session :
+                out.write("<h5>Session</h5><div>")
+                for key, val in session.items() :
+                    out.write(f"<b><code>{key}</code></b><pre>\n")
+                    try :
+                        text = pformat(val)
+                    except :
+                        text = repr(val)
+                    out.write(highlight(text, PythonLexer(), HtmlFormatter()))
+                out.write("</div>")
+        err = InternalServerError(f"The server encountered an internal error"
+                                  f" and was unable to complete your request."
+                                  f" The error has been recorded with identifier"
+                                  f" {name!r} and will be investigated.")
+    return render_template("httperror.html", err=err), err.code
+
+@app.route("/error", methods=["GET", "POST"])
+def error () :
+    if request.method == "GET" :
+        return render_template("error.html", report=None)
+    form = dict(request.form)
+    try :
+        who = teachers[form["login"]]
+        if not teachers.auth(who.login, form["password"]) :
+            raise Exception()
+        if who.group != "admin" :
+            raise Exception()
+        if not form["error"] :
+            raise Exception()
+    except :
+        flash("access denied", "error")
+        return redirect(url_for("error"))
+    try :
+        path = ERROR / form["error"]
+        report = path.read_text(encoding="utf-8")
+    except :
+        flash("invalid error id", "error")
+        return redirect(url_for("error"))
+    return render_template("error.html", report=Markup(report))
 
 ##
 ## asynchronous API for long running tasks
@@ -124,10 +191,8 @@ def async_api (wrapped_function) :
                     tasks[task_id]["return_value"] = wrapped_function(*args, **kwargs)
                 except HTTPException as e :
                     tasks[task_id]["return_value"] = current_app.handle_http_exception(e)
-                except Exception :
-                    tasks[task_id]["return_value"] = InternalServerError()
-                    if current_app.debug :
-                        raise
+                except Exception as err :
+                    tasks[task_id]["return_value"] = handle_exception(err)
                 finally :
                     now = datetime.timestamp(datetime.utcnow())
                     tasks[task_id]["completion_timestamp"] = now
@@ -205,7 +270,8 @@ def index () :
     form = dict(request.form)
     try :
         who = students[form["student"]]
-        assert students.auth(who.num, form.pop("password"))
+        if not students.auth(who.num, form.pop("password")) :
+            raise Exception()
     except :
         errors.append("invalid student's number or password")
     if form.pop("consent", None) != "on" :
@@ -247,6 +313,7 @@ _result_icons = {"fail" : "delete",
 @app.route("/result")
 @async_api
 def result () :
+    foo
     script = pathlib.Path(session["form"]["path"])
     project = pathlib.Path(session["form"]["base"])
     subprocess.run(["python3", "-m", "badass", "run", script, project],
@@ -292,9 +359,10 @@ def teacher () :
     form = dict(request.form)
     try :
         who = teachers[form["login"]]
-        assert teachers.auth(who.login, form.pop("password"))
+        if not teachers.auth(who.login, form.pop("password")) :
+            raise Exception()
     except :
-        flash("indentifiant ou mot de passe incorrect", "error")
+        flash("invalid login or password", "error")
         return redirect(url_for("teacher"))
     # process validated query
     session["form"] = form

@@ -12,5 +12,9 @@ test:
 	badass www -i test
 	make -C test serve
 
+retest:
+	rm -rf test
+	make test
+
 clean:
 	rm -rf build dist not_so_badass.egg-info

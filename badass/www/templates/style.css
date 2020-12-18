@@ -55,6 +55,11 @@ form label {
     background-color: #DFD;
 }
 
+.alert-http {
+    border-color: #00A;
+    background-color: #DDF;
+}
+
 .result > a {
     font-weight: bold;
     padding-left: 2.5em;

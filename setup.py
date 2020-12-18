@@ -51,6 +51,7 @@ setup(name="not-so-badass",
                         "openpyxl",
                         "markdown",
                         "pexpect",
-                        "jsonpath-ng"],
+                        "jsonpath-ng",
+                        "Pygments"],
       package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
