@@ -38,9 +38,11 @@ class Language (BaseLanguage) :
     def make_script (self, path) :
         with path.open("w", **encoding) as script :
             for sub in ("build", "run", "memchk") :
-                script.write(f"mkdirhier {self[self.test.log_dir / sub]}\n")
+                script.write(f"mkdir -p {self[self.test.log_dir / sub]}\n")
             self.pid = self.test.add_path(name="make.pid", log="build")
             script.write(f"echo $$ > {self[self.pid]}\n")
+            self.env = self.test.add_path(name="make.env", log="build")
+            script.write(f"env > {self[self.env]}\n")
             # compile sources
             lflags = set()
             obj_files = []
