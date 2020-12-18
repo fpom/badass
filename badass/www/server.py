@@ -397,4 +397,4 @@ def marks () :
     check_output(["python3", "-m", "badass", "report",
                   "-p", path, "-b", base] + students.groups[group],
                  env=ENV)
-    return send_file(path, as_attachment=True, attachment_filename=path.name)
+    return send_file(path.open("rb"), as_attachment=True, attachment_filename=path.name)
