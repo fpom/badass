@@ -36,14 +36,15 @@ class Report (object) :
         self.load_data()
         self.update_data()
     def _walk (self, root, students=None) :
-        for path in root.iterdir() :
-            if path.is_file() and students is None :
-                yield path
-            elif path.is_dir() :
-                if students is not None and path.name in students :
-                    yield from path.glob("*/*")
-                else :
-                    yield from self._walk(path, students)
+        if root.is_dir() :
+            for path in root.iterdir() :
+                if path.is_file() and students is None :
+                    yield path
+                elif path.is_dir() :
+                    if students is not None and path.name in students :
+                        yield from path.glob("*/*")
+                    else :
+                        yield from self._walk(path, students)
     def save (self, path) :
         with ZipFile(path, "w", compression=ZIP_STORED) as zf :
             zf.writestr("report.xlsx", self.xlsx(),
