@@ -42,7 +42,11 @@ class Language (BaseLanguage) :
             self.pid = self.test.add_path(name="make.pid", log="build")
             script.write(f"echo $$ > {self[self.pid]}\n")
             self.env = self.test.add_path(name="make.env", log="build")
-            script.write(f"env > {self[self.env]}\n")
+            script.write(f"env > {self[self.env]}\n"
+                         f"echo '######' >> {self[self.env]}\n"
+                         f"echo GCC=$(which gcc) >> {self[self.env]}\n"
+                         f"echo GCC_VERSION=$(gcc --version) >> {self[self.env]}\n"
+                         f"echo DRMEMORY=$(which drmemory) >> {self[self.env]}\n")
             # compile sources
             lflags = set()
             obj_files = []
