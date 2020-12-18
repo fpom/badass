@@ -16,23 +16,32 @@ from pygments.formatters import HtmlFormatter
 
 from .mkpass import salthash, SALT
 
+import badass
+
 random.seed()
 
 ##
 ##
 ##
 
+BADASS = str(pathlib.Path(badass.__file__).parent.parent).rstrip("/") + "/"
+STDLIB = str(pathlib.Path(os.__file__).parent.parent).rstrip("/") + "/"
+
 ENV = dict(os.environ)
 ENV["PYTHONPATH"] = ":".join(sys.path)
 
 UPLOAD = pathlib.Path("upload")
+UPLOAD.mkdir(exist_ok=True, parents=True)
 REPORT = pathlib.Path("reports")
+REPORT.mkdir(exist_ok=True, parents=True)
 ERROR = pathlib.Path("errors")
+ERROR.mkdir(exist_ok=True, parents=True)
 
 TEMPLATES = pathlib.Path("templates")
 if not all ((TEMPLATES / tpl).exists() for tpl in
             ("index.html", "result.html", "style.css", "teacher.html", "wait.html")) :
     TEMPLATES = str(pathlib.Path(__file__).parent / "templates")
+TEMPLATES.mkdir(exist_ok=True, parents=True)
 
 ##
 ## users management
@@ -116,7 +125,7 @@ def handle_exception (err) :
         with path.open("w", encoding="utf-8") as out :
             tb = traceback.TracebackException.from_exception(err, capture_locals=True)
             out.write("<h5>Traceback</h5>\n")
-            text = "".join(tb.format())
+            text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
             out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
             if session :
                 out.write("<h5>Session</h5><div>")
@@ -311,13 +320,17 @@ _result_icons = {"fail" : "delete",
                  "warn" : "info",
                  "pass" : "check"}
 
+def check_output (*l, **k) :
+    proc = subprocess.run(*l, **k, capture_output=True)
+    proc.check_returncode()
+
 @app.route("/result")
 @async_api
 def result () :
     script = pathlib.Path(session["form"]["path"])
     project = pathlib.Path(session["form"]["base"])
-    subprocess.run(["python3", "-m", "badass", "run", script, project],
-                   env=ENV)
+    check_output(["python3", "-m", "badass", "run", script, project],
+                 env=ENV)
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
@@ -381,7 +394,7 @@ def marks () :
     now = datetime.now().strftime("%Y-%m-%d---%H-%M-%S")
     path = UPLOAD / form["login"] / f"{group}---{now}.zip"
     path.parent.mkdir(exist_ok=True, parents=True)
-    subprocess.check_output(["python3", "-m", "badass", "report",
-                             "-p", path, "-b", base] + students.groups[group],
-                            env=ENV)
+    check_output(["python3", "-m", "badass", "report",
+                  "-p", path, "-b", base] + students.groups[group],
+                 env=ENV)
     return send_file(path, as_attachment=True, attachment_filename=path.name)
