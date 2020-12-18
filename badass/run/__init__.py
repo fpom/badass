@@ -214,7 +214,7 @@ class Run (_AllTest) :
         self.terminate()
         self_checks, self.checks = self.checks, []
         for title, name in (("compile and link", "build"),
-                           ("memory safety checks", "memchk")) :
+                            ("memory safety checks", "memchk")) :
             checks = list(getattr(self.test.lang, f"report_{name}")())
             with _AllTest(self, text=title) as test :
                 for status, text, details, info in checks :

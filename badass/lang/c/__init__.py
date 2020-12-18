@@ -107,6 +107,8 @@ class Language (BaseLanguage) :
             for diag in diagnostics :
                 if diag["kind"] == "warning" and diag["message"] in self.IGNORE :
                     kind = "info"
+                elif diag["kind"] not in ("info", "warning", "error") :
+                    kind = "info"
                 else :
                     kind = diag["kind"]
                 pos = tree(line=sys.maxsize, path=None, col=sys.maxsize)
