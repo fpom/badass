@@ -137,7 +137,7 @@ def handle_exception (err) :
 @app.route("/error", methods=["GET", "POST"])
 def error () :
     if request.method == "GET" :
-        return render_template("error.html", report=None)
+        return render_template("error.html", report=None, form={})
     form = dict(request.form)
     try :
         who = teachers[form["login"]]
@@ -145,24 +145,25 @@ def error () :
             raise Exception()
         if who.group != "admin" :
             raise Exception()
-        if not form["error"] :
-            raise Exception()
     except :
         flash("access denied", "error")
-        return redirect(url_for("error"))
+        return render_template("error.html", report=None, form=form)
     try :
+        if not form["error"] :
+            raise Exception()
         path = ERROR / form["error"]
         report = path.read_text(encoding="utf-8")
     except :
-        flash("invalid error id", "error")
-        return redirect(url_for("error"))
-    return render_template("error.html", report=Markup(report))
+        flash(f"invalid error identifier {form.pop('error','')!r}", "error")
+        return render_template("error.html", report=None, form=form)
+    if form.get("delete", None) == "on" :
+        path.unlink()
+        form.pop("error", None)
+    return render_template("error.html", report=Markup(report), form=form)
 
 ##
 ## asynchronous API for long running tasks
 ##
-
-# inspired from https://stackoverflow.com/questions/31866796/making-an-asynchronous-task-in-flask
 
 tasks = {}
 

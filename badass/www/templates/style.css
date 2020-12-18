@@ -125,3 +125,7 @@ li.lang-fr {
     font-size: xx-small;
     text-decoration: none;
 }
+
+.danger {
+    color: #900;
+} 
