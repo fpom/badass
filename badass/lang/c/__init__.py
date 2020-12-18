@@ -44,8 +44,6 @@ class Language (BaseLanguage) :
             self.env = self.test.add_path(name="make.env", log="build")
             script.write(f"env > {self[self.env]}\n"
                          f"echo '######' >> {self[self.env]}\n"
-                         f"ls -l $(echo $PATH|sed 's/:.*//') >> {self[self.env]}\n"
-                         f"echo '######' >> {self[self.env]}\n"
                          f"echo GCC=$(which gcc) >> {self[self.env]}\n"
                          f"echo GCC_VERSION=$(gcc --version) >> {self[self.env]}\n"
                          f"echo DRMEMORY=$(which drmemory) >> {self[self.env]}\n")
