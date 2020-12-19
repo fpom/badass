@@ -211,7 +211,7 @@ class Run (_AllTest) :
         self.log = self.log_path.open("w", **encoding)
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
-        self.terminate()
+        self.terminate("end of test")
         self_checks, self.checks = self.checks, []
         for title, name in (("compile and link", "build"),
                             ("memory safety checks", "memchk")) :
@@ -243,15 +243,15 @@ class Run (_AllTest) :
         except EOF :
             self.log.write("error: end of file\n")
             self.add(FAIL, f"program prints `{mdesc(text)}`: got end-of-file")
-            self.terminate()
+            self.terminate("end of stdout")
         except TIMEOUT :
             self.log.write("error: timeout\n")
             self.add(FAIL, f"program prints `{mdesc(text)}`: got timeout")
-            self.terminate()
+            self.terminate("timeout")
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
             self.add(FAIL, f"program prints `{mdesc(text)}`: got internal error")
-            self.terminate()
+            self.terminate("error")
     def put (self, text, eol=True) :
         text = str(text)
         try :
@@ -264,13 +264,17 @@ class Run (_AllTest) :
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
             self.add(FAIL, f"program reads `{mdesc(text)}`: got internal error")
-            self.terminate()
-    def terminate (self) :
+            self.terminate("error")
+    def terminate (self, reason=None) :
         if self._exit_code is not None or self._signal is not None :
             return
+        self._exit_reason = reason
         try :
             self.log.write("terminate: reading until EOF\n")
             self.process.expect(pexpect.EOF)
+        except TIMEOUT :
+            self.log.write("error: timeout\n")
+            self._exit_reason = "timeout"
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
         try :
@@ -296,16 +300,20 @@ class Run (_AllTest) :
             self._exit_code = self.process.exitstatus
         self._signal = self.process.signalstatus
     @cached_property
+    def exit_reason (self) :
+        self.terminate("exit reason requested")
+        return self._exit_reason
+    @cached_property
     def stdout (self) :
-        self.terminate()
+        self.terminate("stdout requested")
         return self.stdout_log.read_text(**encoding)
     @cached_property
     def exit_code (self) :
-        self.terminate()
+        self.terminate("exit code requested")
         return self._exit_code
     @cached_property
     def signal (self) :
-        self.terminate()
+        self.terminate("signal requested")
         return self._signal
     @cached_property
     def process (self) :

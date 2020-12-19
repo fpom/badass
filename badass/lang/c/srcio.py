@@ -72,9 +72,6 @@ class Source (object) :
         src = path.read_bytes()
         with path.open("wb") as out :
             out.write(src[:begin])
-            out.write(b"/*")
-            out.write(src[begin:end])
-            out.write(b"*/")
             out.write(src[end:])
         self.parse(path)
     def add (self, source, path) :
