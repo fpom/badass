@@ -72,6 +72,8 @@ class Source (object) :
         src = path.read_bytes()
         with path.open("wb") as out :
             out.write(src[:begin])
+            lno = len(src[:end].splitlines())
+            out.write(b"#line %i\n" % lno)
             out.write(src[end:])
         self.parse(path)
     def add (self, source, path) :
