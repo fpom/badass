@@ -52,6 +52,7 @@ setup(name="not-so-badass",
                         "markdown",
                         "pexpect",
                         "jsonpath-ng",
-                        "Pygments"],
+                        "Pygments",
+                        "sympy"],
       package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
