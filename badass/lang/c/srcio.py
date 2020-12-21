@@ -1,13 +1,21 @@
-import subprocess, json, io, re, collections, pathlib
+import subprocess, json, io, collections, pathlib
 
 from ...run.queries import query
 from ... import encoding, tree, recode
 
-_tidy_multi = re.compile(r"\b\s{2,}\b")
-_tidy_words = re.compile(r"(\B\s+\b)|(\b\s+\B)|(\B\s+\B)")
-
 def tidy (decl) :
-    return _tidy_words.sub(" ", _tidy_multi.sub(" ", decl.strip()))
+    dump = subprocess.check_output(["clang", "-cc1", "-ast-dump=json"],
+                                   input=decl.rstrip(";") + ";",
+                                   stderr=subprocess.DEVNULL,
+                                   **encoding)
+    ast = json.loads(dump)
+    for obj in ast["inner"] :
+        if not obj.get("isImplicit", False) :
+            name = obj.get("name")
+            if name :
+                return obj["type"]["qualType"].replace("(", f"{name}(", 1)
+            else :
+                return obj["type"]["qualType"]
 
 class Source (object) :
     def __init__ (self, base_dir, source_files) :
@@ -38,8 +46,8 @@ class Source (object) :
             if decl.get("isImplicit", False) :
                 continue
             n = decl["name"]
-            t = tidy(decl["type"]["qualType"])
-            tn = tidy(t.replace("(", f"{n}(", 1))
+            t = decl["type"]["qualType"]
+            tn = t.replace("(", f"{n}(", 1)
             self.obj[n] = self.obj[tn] = (_path, tree(decl))
             self.sig[t].append((_path, n))
             self.sig[n].extend([(_path, tn), (_path, t)])
@@ -47,7 +55,7 @@ class Source (object) :
             if decl.get("isImplicit", False) :
                 continue
             n = decl["name"]
-            t = tidy(decl["type"]["qualType"])
+            t = decl["type"]["qualType"]
             self.obj[n] = self.obj[t] = (_path, tree(decl))
             self.sig[t].append((_path, n))
     def __getitem__ (self, loc) :
