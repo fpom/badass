@@ -100,10 +100,13 @@ class Language (BaseLanguage) :
         for action, path, cmd, stdio in self.log :
             success = stdio.exit_code.read_text(**encoding).strip() == "0"
             info = []
+            stderr = stdio.stderr.read_text(**encoding)
             try :
-                diagnostics = json.loads(stdio.stderr.read_text(**encoding))
+                diagnostics = json.loads(stderr)
             except :
-                diagnostics = []
+                details = f"`$ {cmd}`\n<pre>\n{mdesc(stderr)}\n<pre>"
+                yield success, f"{action} `{path}`", details, None
+                continue
             for diag in diagnostics :
                 if diag["kind"] == "warning" and diag["message"] in self.IGNORE :
                     kind = "info"

@@ -18,6 +18,7 @@ from pexpect.exceptions import EOF, TIMEOUT
 ##
 
 CONFIG = tree()
+ARGS = tree()
 
 ##
 ##
@@ -234,6 +235,8 @@ class Run (_AllTest) :
         self.checks.extend(self_checks)
         super().__exit__(exc_type, exc_val, exc_tb)
     def get (self, text) :
+        if self.terminated :
+            return
         text = str(text)
         try :
             self.log.write(f"expect: {text!r}\n")
@@ -253,6 +256,8 @@ class Run (_AllTest) :
             self.add(FAIL, f"program prints `{mdesc(text)}`: got internal error")
             self.terminate("error")
     def put (self, text, eol=True) :
+        if self.terminated :
+            return
         text = str(text)
         try :
             self.log.write(f"send: `{mdesc(text)}`\n")
@@ -265,8 +270,11 @@ class Run (_AllTest) :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
             self.add(FAIL, f"program reads `{mdesc(text)}`: got internal error")
             self.terminate("error")
+    @property
+    def terminated (self) :
+        return self._exit_code is not None or self._signal is not None
     def terminate (self, reason=None) :
-        if self._exit_code is not None or self._signal is not None :
+        if self.terminated :
             return
         self._exit_reason = reason
         try :

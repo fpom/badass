@@ -295,11 +295,11 @@ def index () :
     # process validated query
     session["form"] = form
     # build unique dir for submission
-    entry = [form["Course"]]
+    entry = [form.pop("Course")]
     while entry[-1] in form :
-        entry.append(form[entry[-1]])
+        entry.append(form.pop(entry[-1]))
     now = datetime.now()
-    entry.extend([form["student"],
+    entry.extend([form.pop("student"),
                   now.strftime("%Y-%m-%d"),
                   now.strftime("%H:%M:%S.%f")])
     base = UPLOAD.joinpath(*entry)
@@ -307,11 +307,9 @@ def index () :
     base /= "src"
     base.mkdir(parents=True, exist_ok=True)
     # save files
-    form["source"] = []
     for src in request.files.getlist("source") :
         name = secure_filename(src.filename)
         path = str(base / name)
-        form["source"].append(name)
         src.save(path)
     # go process the submission
     return redirect(url_for("result"))
@@ -327,9 +325,13 @@ def check_output (*l, **k) :
 @app.route("/result")
 @async_api
 def result () :
-    script = pathlib.Path(session["form"]["path"])
-    project = pathlib.Path(session["form"]["base"])
-    check_output(["python3", "-m", "badass", "run", script, project],
+    form = session["form"]
+    script = pathlib.Path(form.pop("path"))
+    project = pathlib.Path(form.pop("base"))
+    define = []
+    for key, val in form.items() :
+        define.extend(["-d", f"{key}={val}"])
+    check_output(["python3", "-m", "badass", "run", script, project] + define,
                  env=ENV)
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
