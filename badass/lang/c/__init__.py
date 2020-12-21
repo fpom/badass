@@ -104,7 +104,10 @@ class Language (BaseLanguage) :
             try :
                 diagnostics = json.loads(stderr)
             except :
-                details = f"`$ {cmd}`\n<pre>\n{mdesc(stderr)}\n<pre>"
+                if stderr.strip() :
+                    details = f"`$ {cmd}`\n<pre>\n{mdesc(stderr)}\n<pre>"
+                else :
+                    details = f"`$ {cmd}`"
                 yield success, f"{action} `{path}`", details, None
                 continue
             for diag in diagnostics :
