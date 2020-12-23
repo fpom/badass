@@ -3,19 +3,33 @@ import subprocess, json, io, collections, pathlib
 from ...run.queries import query
 from ... import encoding, tree, recode
 
-def tidy (decl) :
-    dump = subprocess.check_output(["clang", "-cc1", "-ast-dump=json"],
-                                   input=decl.rstrip(";") + ";",
-                                   stderr=subprocess.DEVNULL,
-                                   **encoding)
-    ast = json.loads(dump)
+def _cc1 (src) :
+    cc = subprocess.run(["clang", "-cc1", "-ast-dump=json"],
+                        input=src, capture_output=True,
+                        **encoding)
+    if cc.returncode == 0 :
+        return json.loads(cc.stdout)
+    else :
+        raise SystemError(f"clang exited with code {cc.returncode}: {cc.stderr}")
+
+def tidy (sig, decl=None) :
+    ignore = set()
+    sig = sig.rstrip().rstrip(";") + ";"
+    if decl :
+        decl = decl.rstrip().rstrip(";") + ";"
+        for obj in _cc1(decl)["inner"] :
+            ignore.add(obj.get("name"))
+        ast = _cc1(decl + sig)
+    else :
+        ast = _cc1(sig)
     for obj in ast["inner"] :
-        if not obj.get("isImplicit", False) :
-            name = obj.get("name")
-            if name :
-                return obj["type"]["qualType"].replace("(", f"{name}(", 1)
-            else :
-                return obj["type"]["qualType"]
+        name = obj.get("name")
+        if name in ignore :
+            continue
+        if name :
+            return obj["type"]["qualType"].replace("(", f"{name}(", 1)
+        else :
+            return obj["type"]["qualType"]
 
 class Source (object) :
     def __init__ (self, base_dir, source_files) :
@@ -67,8 +81,8 @@ class Source (object) :
     def __iter__ (self) :
         for path in self.ast :
             yield pathlib.Path(path)
-    def decl (self, signature) :
-        info = self.obj.get(tidy(signature), None)
+    def decl (self, signature, declarations=None) :
+        info = self.obj.get(tidy(signature, declarations), None)
         if info is not None :
             return info[1]
     def discard (self, name) :

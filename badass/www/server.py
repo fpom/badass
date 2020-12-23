@@ -288,6 +288,8 @@ def index () :
         errors.append("you must certify your identity")
     if not request.files.getlist("source") :
         errors.append("missing source files(s)")
+    if any(not src.filename for src in request.files.getlist("source")) :
+        errors.append("missing source files(s)")
     if errors :
         for msg in errors :
             flash(msg, "error")

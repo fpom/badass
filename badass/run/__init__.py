@@ -177,8 +177,8 @@ class Test (_Test) :
         self.source_files.append(path)
     def del_source (self, name) :
         self.lang.del_source(name)
-    def has (self, signature) :
-        self.check(self.lang.decl(signature),
+    def has (self, signature, declarations=None) :
+        self.check(self.lang.decl(signature, declarations),
                    f"code declares `{mdesc(signature)}`")
     def query (self, pattern) :
         return [found for expr in expand(pattern, self.lang)

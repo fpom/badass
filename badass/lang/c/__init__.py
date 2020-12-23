@@ -27,8 +27,8 @@ class Language (BaseLanguage) :
         self.source.add(source, path)
     def del_source (self, name) :
         self.source.discard(name)
-    def decl (self, name) :
-        return self.source.decl(name)
+    def decl (self, sig, decl=None) :
+        return self.source.decl(sig, decl)
     def __getitem__ (self, path) :
         try :
             path = path.relative_to(self.test.test_dir)
