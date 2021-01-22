@@ -280,10 +280,10 @@ def index () :
     form = dict(request.form)
     try :
         who = students[form["student"]]
-        if not students.auth(who.num, form.pop("password")) :
+        if not students.auth(who.login, form.pop("password")) :
             raise Exception()
     except :
-        errors.append("invalid student's number or password")
+        errors.append("invalid login or password")
     if form.pop("consent", None) != "on" :
         errors.append("you must certify your identity")
     if not request.files.getlist("source") :
