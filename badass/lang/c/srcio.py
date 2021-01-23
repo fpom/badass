@@ -23,6 +23,8 @@ def tidy (sig, decl=None) :
     else :
         ast = _cc1(sig)
     for obj in ast["inner"] :
+        if obj.get("isImplicit") :
+            continue
         name = obj.get("name")
         if name in ignore :
             continue
