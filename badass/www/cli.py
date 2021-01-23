@@ -23,6 +23,8 @@ def add_arguments (sub) :
     group = sub.add_argument_group("passwords management options")
     group.add_argument("-u", "--user", default=[], action="append", type=str,
                        help="(re)generate password for selected user (default: all)")
+    group.add_argument("-a", "--add", default=None, type=str, metavar="PATH",
+                       help="add users from CSV file PATH")
     group.add_argument("-r", "--read", default=False, action="store_true",
                        help="read passwords interactively instead of generating them")
     group.add_argument("-d", "--default", default=None, action="store", type=str,
@@ -53,7 +55,8 @@ def main (args) :
         copy_static(pathlib.Path(args.init), args.clobber)
     elif args.passwd is not None :
         from .mkpass import mkpass
-        mkpass(args.passwd, args.user or None, args.read, args.default, args.log)
+        mkpass(args.passwd, args.user or None, args.add,
+               args.read, args.default, args.log)
     elif args.serve :
         env = dict(os.environ)
         env["FLASK_APP"] = "badass.www.server"

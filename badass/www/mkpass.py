@@ -32,7 +32,24 @@ def salthash (s, p) :
     salted = (s + p).encode("utf-8")
     return hashlib.sha512(salted).hexdigest()
 
-def mkpass (path, users=None, ask=False, default=None, log=sys.stdout) :
+def mkpass (path, users=None, add=None, ask=False, default=None, log=sys.stdout) :
+    if add :
+        users = []
+        with open(path, encoding="utf-8") as infile :
+            old_fields = infile.readline().strip().split(",")
+        with open(add, encoding="utf-8") as infile :
+            add_fields = infile.readline().strip().split(",")
+            missing = (set(old_fields) - {"password", "salt"}) - set(add_fields)
+            if missing :
+                raise ValueError(f"missing columns: {','.join(repr(s) for s in missing)}")
+            add_key = add_fields[0]
+            add_db = csv.DictReader(infile, add_fields)
+            with open(path, "a", encoding="utf-8") as outfile :
+                out = csv.DictWriter(outfile, old_fields,
+                                     restval="", extrasaction="ignore")
+                for row in add_db :
+                    users.append(row[add_key])
+                    out.writerow(row)
     lines = []
     pwd, slt = pwgen(), salt()
     with open(path, encoding="utf-8") as infile :
@@ -58,6 +75,8 @@ def mkpass (path, users=None, ask=False, default=None, log=sys.stdout) :
                     row["password"] = password
                 lines.append(row)
                 log.write(f"{row[key]} {password}\n")
+            else :
+                lines.append(row)
     pathlib.Path(path).rename(path + ".bak")
     with open(path, "w", encoding="utf-8") as outfile :
         db = csv.DictWriter(outfile, fields)
