@@ -4,7 +4,7 @@ from .wordlist import words, syllables
 
 random = SystemRandom()
 
-nonalpha = "".join(sorted(set("0123456789-+/*=%,;.:!?$&#|@~{}()[]_<>")))
+nonalpha = "".join(sorted(set("0123456789-+/*%.:!?$&#|@~{}()[]_<>")))
 
 def pwgen (length=2) :
     while True :
