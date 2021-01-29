@@ -4,7 +4,7 @@ import badass.run
 def add_arguments (sub) :
     sub.add_argument("-k", "--keep", default=False, action="store_true",
                      help="do not remove files after building the archives")
-    sub.add_argument("-t", "--timeout", default=30, type=int,
+    sub.add_argument("-t", "--timeout", default=10, type=int,
                      help="timeout for I/O with child process")
     sub.add_argument("-d", "--define", type=str, action="append", default=[],
                      metavar="NAME[=VALUE]",
