@@ -88,6 +88,7 @@ class Language (BaseLanguage) :
             ret = self._ret = self.test.add_path(name=f"run.status", log="run")
             script.write(f"{drmem} ./a.out 2> {self[err]}\n"
                          f"echo $? > {self[ret]}\n"
+                         f"echo\n"
                          f"exit 0")
     @property
     def exit_code (self) :
