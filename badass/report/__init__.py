@@ -25,9 +25,10 @@ class Report (object) :
         from openpyxl.styles import PatternFill, Alignment
         #
         self.base = base
-        self.reports = []
         self.content = []
+        self.df = []
         for exo in exercises :
+            self.reports = []
             for filepath in self._walk(base / exo) :
                 head = None
                 parts = filepath.relative_to(base).parts
@@ -44,9 +45,9 @@ class Report (object) :
                     self.reports.append(submission(student, "/".join(exercise), date,
                                                    filepath.parent))
                 self.content.append(filepath)
-        self.reports.sort()
-        self.load_data()
-        self.update_data()
+            self.reports.sort()
+            self.load_data(exo)
+            self.update_data()
     def _walk (self, root) :
         if root.is_dir() :
             for path in root.iterdir() :
@@ -65,7 +66,7 @@ class Report (object) :
                     comp = {"compress_type" : ZIP_LZMA,
                             "compresslevel" : 9}
                 zf.write(cont, cont.relative_to(self.base), **comp)
-    def load_data (self) :
+    def load_data (self, exercise) :
         users = pd.read_csv("data/students.csv")
         headers = {(0, 1) : "student",
                    (0, 2) : "name",
@@ -122,12 +123,13 @@ class Report (object) :
                 outrow["total"] = 2 * count
             out.writerow(outrow)
         raw_data.seek(0)
-        self.df = pd.read_csv(raw_data,
-                              converters={"student" : str,
-                                          "date" : pd.to_datetime,
-                                          "missing report" : lambda c : bool(int(c))})
+        df = pd.read_csv(raw_data,
+                         converters={"student" : str,
+                                     "date" : pd.to_datetime,
+                                     "missing report" : lambda c : bool(int(c))})
+        self.df.append((exercise, df))
     def update_data (self) :
-        df = self.df
+        _, df = self.df[-1]
         df.insert(df.columns.get_loc("score"), "mark", df["score"] / df["total"])
         df.insert(df.columns.get_loc("score"), "best", False)
         first = None
@@ -143,9 +145,18 @@ class Report (object) :
         df.loc[first:, "best"] = best.eq(best.max())
     def xlsx (self) :
         # convert dataframe into a workbook
-        wb = self.wb = Workbook()
-        ws = self.ws = wb.active
-        for row in dataframe_to_rows(self.df, index=False, header=True):
+        wb = Workbook()
+        wb.remove(wb.active)
+        for exo, df in self.df :
+            ws = self.ws = wb.create_sheet(exo)
+            self._xlsx(ws, df)
+        # save workbook and return it
+        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".xlsx") as tmp :
+            wb.save(tmp.name)
+            tmp.seek(0)
+            return tmp.read()
+    def _xlsx (self, ws, df) :
+        for row in dataframe_to_rows(df, index=False, header=True):
             ws.append(row)
         # styling
         STYLES = {"student" : None,
@@ -200,11 +211,6 @@ class Report (object) :
         ws.row_dimensions[1].height = 200
         # add filter
         ws.auto_filter.ref = ws.dimensions
-        # save workbook and return it
-        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".xlsx") as tmp :
-            wb.save(tmp.name)
-            tmp.seek(0)
-            return tmp.read()
     def _xlsx_style_mark (self, cell) :
         best = self.ws[f"{self.cname['best']}{cell.row}"]
         if best.value :
