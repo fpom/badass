@@ -382,6 +382,8 @@ def teacher () :
         flash("invalid login or password", "error")
         return redirect(url_for("teacher"))
     # process validated query
+    form["group"] = request.form.getlist("group")
+    form["exercise"] = request.form.getlist("exercise")
     session["form"] = form
     return redirect(url_for("marks"))
 
@@ -389,16 +391,15 @@ def teacher () :
 @async_api
 def marks () :
     form = session["form"]
-    entry = [form["Course"]]
-    while entry[-1] in form :
-        entry.append(form[entry[-1]])
-    group = entry.pop(-1)
-    entry.append(form["exercise"])
-    base = UPLOAD.joinpath(*entry)
+    base = UPLOAD.joinpath(form["Course"])
     now = datetime.now().strftime("%Y-%m-%d---%H-%M-%S")
+    group = "-".join(sorted(form["group"]))
     path = UPLOAD / form["login"] / f"{group}---{now}.zip"
     path.parent.mkdir(exist_ok=True, parents=True)
-    check_output(["python3", "-m", "badass", "report",
-                  "-p", path, "-b", base] + students.groups[group],
-                 env=ENV)
+    argv = ["python3", "-m", "badass", "report", "-p", path, "-b", base]
+    for exo in form["exercise"] :
+        argv.extend(["-e", exo])
+    for grp in form["group"] :
+        argv.extend(students.groups[grp])
+    check_output(argv, env=ENV)
     return send_file(path.open("rb"), as_attachment=True, attachment_filename=path.name)

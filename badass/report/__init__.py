@@ -2,7 +2,6 @@ import sys, tempfile
 
 from collections import namedtuple
 from zipfile import ZipFile, ZIP_STORED, ZIP_LZMA
-from pathlib import Path
 from io import StringIO
 from csv import DictReader, DictWriter
 
@@ -17,7 +16,7 @@ _test = {"pass" : 0,
          "fail" : 2}
 
 class Report (object) :
-    def __init__ (self, base, students) :
+    def __init__ (self, base, exercises, students) :
         # only load if necessary to speedup prog startup
         global pd, Workbook, dataframe_to_rows, PatternFill, Alignment
         import pandas as pd
@@ -25,50 +24,60 @@ class Report (object) :
         from openpyxl.utils.dataframe import dataframe_to_rows
         from openpyxl.styles import PatternFill, Alignment
         #
-        self.todo = []
-        root = base.parent
-        for path in self._walk(base, students) :
-            short = path.relative_to(root)
-            *exercise, student, day, time = short.parts
-            date = f"{day} {time}"
-            self.todo.append(submission(student, "/".join(exercise), date, path))
-        self.todo.sort()
+        self.base = base
+        self.reports = []
+        self.content = []
+        for exo in exercises :
+            for filepath in self._walk(base / exo) :
+                head = None
+                parts = filepath.relative_to(base).parts
+                for i, p in enumerate(parts) :
+                    if p in students :
+                        head, tail = parts[:i+1], parts[i+1:]
+                        break
+                if head is None :
+                    continue
+                if tail[-1] == "report.zip" :
+                    *exercise, student = head
+                    day, time, *path = tail
+                    date = f"{day} {time}"
+                    self.reports.append(submission(student, "/".join(exercise), date,
+                                                   filepath.parent))
+                self.content.append(filepath)
+        self.reports.sort()
         self.load_data()
         self.update_data()
-    def _walk (self, root, students=None) :
+    def _walk (self, root) :
         if root.is_dir() :
             for path in root.iterdir() :
-                if path.is_file() and students is None :
+                if path.is_file() :
                     yield path
                 elif path.is_dir() :
-                    if students is not None and path.name in students :
-                        yield from path.glob("*/*")
-                    else :
-                        yield from self._walk(path, students)
+                    yield from self._walk(path)
     def save (self, path) :
         with ZipFile(path, "w", compression=ZIP_STORED) as zf :
             zf.writestr("report.xlsx", self.xlsx(),
                         compress_type=ZIP_LZMA, compresslevel=9)
-            for sub in self.todo :
-                base = Path(sub.student) / sub.date.replace(" ", "@")
-                for path in self._walk(sub.path) :
-                    if path.suffix == ".zip" :
-                        comp = {}
-                    else :
-                        comp = {"compress_type" : ZIP_LZMA,
-                                "compresslevel" : 9}
-                    zf.write(path, base / path.relative_to(sub.path), **comp)
+            for cont in self.content :
+                if cont.suffix == ".zip" :
+                    comp = {}
+                else :
+                    comp = {"compress_type" : ZIP_LZMA,
+                            "compresslevel" : 9}
+                zf.write(cont, cont.relative_to(self.base), **comp)
     def load_data (self) :
+        users = pd.read_csv("data/students.csv")
         headers = {(0, 1) : "student",
-                   (0, 2) : "exercise",
-                   (0, 3) : "score",
-                   (0, 4) : "total",
-                   (0, 5) : "date",
-                   (0, 6) : "missing report",
+                   (0, 2) : "name",
+                   (0, 3) : "exercise",
+                   (0, 4) : "score",
+                   (0, 5) : "total",
+                   (0, 6) : "date",
+                   (0, 7) : "missing report",
                    (sys.maxsize, 0) : "permalink"}
         csv_data = {}
         permalink = {}
-        for sub in self.todo :
+        for sub in self.reports :
             try :
                 path = sub.path / "report.zip"
                 with ZipFile(path) as zf :
@@ -85,11 +94,16 @@ class Report (object) :
         raw_data = StringIO()
         out = DictWriter(raw_data, [v for _, v in sorted(headers.items())])
         out.writeheader()
-        for sub in self.todo :
+        for sub in self.reports :
             outrow = {"student" : sub.student,
+                      "name" : "",
                       "exercise" : sub.exercise,
                       "date" : sub.date,
                       "missing report" : 0}
+            row = users[users["login"] == sub.student]
+            if not row.empty :
+                record = next(row.iterrows())[1]
+                outrow["name"] = f"{record['surname']} {record['name'].upper()}"
             if sub.path not in csv_data :
                 outrow["missing report"] = 1
             else :
@@ -135,6 +149,7 @@ class Report (object) :
             ws.append(row)
         # styling
         STYLES = {"student" : None,
+                  "name" : None,
                   "exercise" : None,
                   "mark" : self._xlsx_style_mark,
                   "best" : None,
@@ -167,6 +182,7 @@ class Report (object) :
                 cell.alignment = Alignment(textRotation=90)
         # resizing
         WIDTH = {"student" : 12,
+                 "name" : 16,
                  "exercise" : 12,
                  "mark" : 8,
                  "best" : 8,
@@ -195,7 +211,7 @@ class Report (object) :
             style = "Good"
         else :
             style = "Normal"
-        for col in ("student", "exercise", "mark", "best", "date") :
+        for col in ("student", "name", "exercise", "mark", "best", "date") :
             self.ws[f"{self.cname[col]}{cell.row}"].style = style
         if not pd.isna(cell.value) :
             cell.value = (f"={self.cname['score']}{cell.row}"
