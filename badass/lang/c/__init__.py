@@ -75,7 +75,7 @@ class Language (BaseLanguage) :
             err = self.test.add_path(name=f"link.stderr", log="build")
             ret = self.test.add_path(name=f"link.status", log="build")
             obj = " ".join(self[o] for o in obj_files)
-            gcc = f"gcc {' '.join(lflags)} {obj}"
+            gcc = f"gcc {obj} {' '.join(lflags)}"
             script.write(f"rm -f a.out\n"
                          f"{gcc} > {self[out]} 2> {self[err]}\n"
                          f"echo $? > {self[ret]}\n")
