@@ -85,8 +85,12 @@ class _NestedTest (_Test) :
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         self.test.add = self._test_add
-        self.status = self._reduce(t.status for t in self.checks)
+        if exc_type is None :
+            self.status = self._reduce(t.status for t in self.checks)
+        else :
+            self.status = FAIL
         self.test.checks.append(self)
+        return True
 
 class _AllTest (_NestedTest) :
     def _reduce (self, stats) :
@@ -140,7 +144,10 @@ class Test (_Test) :
             elif path.is_dir() :
                 yield from self._walk(path)
     def __exit__ (self, exc_type, exc_val, exc_tb) :
-        self.status = _AllTest._reduce(self, (t.status for t in self.checks))
+        if exc_type is None :
+            self.status = _AllTest._reduce(self, (t.status for t in self.checks))
+        else :
+            self.status = FAIL
         with (self.report_dir / "test.json").open("w", **encoding) as out :
             json.dump(self, out, ensure_ascii=False, cls=JSONEncoder)
         test_zip = self.test_dir.with_suffix(".zip")
@@ -157,6 +164,7 @@ class Test (_Test) :
         if not CONFIG.keep :
             rmtree(self.test_dir, ignore_errors=True)
         self.TESTS.append(test_zip)
+        return True
     def add_path (self, log=None, name=None, **args) :
         if log is True :
             args["dir"] = self.log_dir
@@ -233,7 +241,7 @@ class Run (_AllTest) :
                     else :
                         test.add(PASS if status else FAIL, text, details, auto=True)
         self.checks.extend(self_checks)
-        super().__exit__(exc_type, exc_val, exc_tb)
+        return super().__exit__(exc_type, exc_val, exc_tb)
     def get (self, text) :
         if self.terminated :
             return
