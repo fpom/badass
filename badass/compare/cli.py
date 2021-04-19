@@ -15,9 +15,33 @@ def add_arguments (sub) :
                      help="draw heatmap with absolute colors")
     sub.add_argument("--load", default=None, action="store", type=str, metavar="CSV",
                      help="load distance matrix from CSV instead of computing it")
-    sub.add_argument("project", default=[], type=str, nargs="*",
-                     help="project base dir (or single file)")
+    sub.add_argument("path", default=[], type=str, nargs="*",
+                     help="path to one student project")
 
 def main (args) :
     "compare projects"
-    print("compare", args)
+    from . import Dist
+    import pathlib, tqdm, ast
+    if args.load :
+        dist = Dist.read_csv(args.load)
+    else :
+        projects = list(args.path)
+        dist = Dist([pathlib.Path(p).name for p in projects])
+        todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
+        for p, q in tqdm.tqdm(todo) :
+            kp = pathlib.Path(p).name
+            kq = pathlib.Path(q).name
+            dist.add(kp, p, kq, q, *args.glob)
+    if args.csv :
+        dist.csv(args.csv)
+    if args.heatmap :
+        options = {}
+        for opt in args.hmopt :
+            key, val = opt.split("=", 1)
+            try :
+                val = ast.literal_eval(val)
+            except :
+                pass
+            options[key] = val
+        dist.heatmap(args.heatmap, max_size=args.maxsize, absolute=args.absolute,
+                     **options)
