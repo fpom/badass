@@ -57,12 +57,15 @@ class Dist (object) :
     def _leaves (self, node) :
         if node.is_leaf() :
             return self.dist.index[node.get_id()]
-    def heatmap (self, path, max_size=0, absolute=False, **args) :
+    def heatmap (self, path, max_size=0, prune=0, absolute=False, **args) :
         import seaborn as sns
         import matplotlib.pylab as plt
-        from scipy.cluster.hierarchy import to_tree, linkage
+        from scipy.cluster.hierarchy import to_tree, linkage, ClusterWarning
+        from warnings import simplefilter
+        simplefilter("ignore", ClusterWarning)
+        path = pathlib.Path(path)
         kw_lnk = {}
-        kw_sns = {"vmax" :1.0 if absolute else self.dist.max().max(),
+        kw_sns = {"vmax" : 1.0 if absolute else self.dist.max().max(),
                   "cmap" : "RdYlBu"}
         kw_plt = {}
         kw = {"lnk" : kw_lnk, "sns" : kw_sns, "plt" : kw_plt}
@@ -73,19 +76,40 @@ class Dist (object) :
                 raise TypeError(f"unexpected argument {key!r}")
         # draw whole heatmap
         data = self.dist.fillna(0)
-        # use distance matrix as itself
         link = linkage(data.values[np.triu_indices(len(self.dist), 1)], **kw_lnk)
-        # use distance matrix as a list of vectore
-        #link = linkage(data, **kw_lnk)
         cg = sns.clustermap(data, row_linkage=link, col_linkage=link, **kw_sns)
         plt.setp(cg.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
         plt.setp(cg.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
         cg.savefig(path, **kw_plt)
         plt.close(cg.fig)
+        # prune outliers
+        tree = to_tree(cg.dendrogram_row.calculated_linkage)
+        if prune and tree.dist :
+            leaves = set()
+            todo = [tree]
+            while todo :
+                node = todo.pop()
+                if node.dist / tree.dist <= prune :
+                    if node.get_count() > 1 :
+                        leaves.update(node.pre_order(self._leaves))
+                else :
+                    if node.left :
+                        todo.append(node.left)
+                    if node.right :
+                        todo.append(node.right)
+            leaves.discard(None)
+            if len(leaves) > 1 :
+                dist = self.dist[self.dist.index.isin(leaves)][[str(l) for l in leaves]]
+                sub = sns.clustermap(dist.fillna(0), **kw_sns)
+                plt.setp(sub.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
+                plt.setp(sub.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
+                target = str(path.parent / f"{path.stem}-pruned{path.suffix}")
+                sub.savefig(target, **kw_plt)
+                plt.close(sub.fig)
+        # split dendogram into subtrees
         if not max_size :
             return
-        # split dendogram into subtrees
-        todo = [to_tree(cg.dendrogram_row.calculated_linkage)]
+        todo = [tree]
         done = []
         while todo :
             tree = todo.pop()
@@ -94,7 +118,6 @@ class Dist (object) :
             else :
                 done.append(tree)
         # draw each subtree
-        path = pathlib.Path(path)
         base = path.parent
         name = path.with_suffix("").name
         sufx = path.suffix
