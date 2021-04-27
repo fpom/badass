@@ -53,6 +53,7 @@ setup(name="not-so-badass",
                         "pexpect",
                         "jsonpath-ng",
                         "Pygments",
+                        "tatsu",
                         "sympy"],
       package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
