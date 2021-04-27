@@ -2,6 +2,7 @@ import subprocess, json, io, collections, pathlib
 
 from ...run.queries import query
 from ... import encoding, tree, recode
+from .cnip import cnip
 
 def _cc1 (src) :
     cc = subprocess.run(["clang", "-cc1", "-ast-dump=json"],
@@ -57,7 +58,8 @@ class Source (object) :
                               input=source.getvalue(),
                               capture_output=True,
                               **encoding)
-        ast = self.ast[_path] = tree(json.loads(done.stdout))
+        ast = tree(json.loads(done.stdout))
+        self.ast[_path] = {"clang" : ast, "cnip" : cnip.parse(path).dict()}
         for decl in query("$..*[?kind='FunctionDecl']", ast) :
             if decl.get("isImplicit", False) :
                 continue

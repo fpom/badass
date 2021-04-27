@@ -6,6 +6,7 @@ from hadlib import getopt
 from .. import BaseLanguage
 from ... import tree, encoding, cached_property, mdesc
 from .drmem import parse as drparse
+from .strace import STrace
 from .srcio import Source
 
 class Language (BaseLanguage) :
@@ -20,6 +21,8 @@ class Language (BaseLanguage) :
         self.log = []
         self.mem = self.test.log_dir / "memchk"
         self.mem.mkdir(parents=True, exist_ok=True)
+        self._strace = self.test.log_dir / "strace"
+        self._strace.mkdir(parents=True, exist_ok=True)
     @cached_property
     def source (self) :
         return Source(self.test.test_dir, self.test.source_files)
@@ -35,7 +38,7 @@ class Language (BaseLanguage) :
         except :
             pass
         return quote(str(path))
-    def make_script (self, path) :
+    def make_script (self, path, trace="drmem") :
         with path.open("w", **encoding) as script :
             for sub in ("build", "run", "memchk") :
                 script.write(f"mkdir -p {self[self.test.log_dir / sub]}\n")
@@ -82,11 +85,16 @@ class Language (BaseLanguage) :
             self.log.append(["link", "a.out", gcc,
                              tree(stdout=out, stderr=err, exit_code=ret)])
             # run program
-            drmem = (f"drmemory -quiet -logdir {self[self.mem]}"
-                     " -callstack_srcfile_prefix $(pwd) --")
+            if trace == "drmem" :
+                trace = (f"drmemory -quiet -logdir {self[self.mem]}"
+                         " -callstack_srcfile_prefix $(pwd) --")
+            elif trace == "strace" :
+                trace = f"strace -r -ff -xx -v -o {self[self._strace]}/log"
+            else :
+                raise ValueError(f"unknown tracing method '{trace}'")
             err = self.test.add_path(name=f"run.stderr", log="run")
             ret = self._ret = self.test.add_path(name=f"run.status", log="run")
-            script.write(f"{drmem} ./a.out 2> {self[err]}\n"
+            script.write(f"{trace} ./a.out 2> {self[err]}\n"
                          f"echo $? > {self[ret]}\n"
                          f"echo\n"
                          f"exit 0")
@@ -97,6 +105,13 @@ class Language (BaseLanguage) :
             return int(ret)
         except :
             return ret
+    def checks (self) :
+        yield "compile and link", "build", list(self.report_build())
+        checks = list(self.report_memchk())
+        if checks :
+            yield "memory safety checks", "memchk", checks
+    def strace (self) :
+        return STrace(self._strace)
     def report_build (self) :
         for action, path, cmd, stdio in self.log :
             success = stdio.exit_code.read_text(**encoding).strip() == "0"

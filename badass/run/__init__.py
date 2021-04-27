@@ -1,9 +1,10 @@
-import json, os
+import json, os, ast
 
 from pathlib import Path
 from shutil import copytree, rmtree
 from time import sleep
 from zipfile import ZipFile, ZIP_LZMA
+from collections import defaultdict
 
 from ..lang import load as load_lang
 from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc
@@ -67,6 +68,7 @@ class _Test (object) :
         self.checks.append(_Test(text, status, details, auto))
     def check (self, value, text, details=None, auto=False) :
         self.add(PASS if bool(value) else FAIL, text, details, auto)
+        return bool(value)
     def any (self, text="at least one test must pass", details=None, auto=False) :
         return _AnyTest(self, text, details, auto)
     def all (self, text="all tests must pass", details=None, auto=False) :
@@ -186,13 +188,18 @@ class Test (_Test) :
     def del_source (self, name) :
         self.lang.del_source(name)
     def has (self, signature, declarations=None) :
-        self.check(self.lang.decl(signature, declarations),
-                   f"code declares `{mdesc(signature)}`")
-    def query (self, pattern) :
+        return self.check(self.lang.decl(signature, declarations),
+                          f"code declares `{mdesc(signature)}`")
+    def query (self, pattern, parser="clang", tree=None) :
+        if tree is None :
+            if parser is not None :
+                tree = {k : v[parser] for k, v in self.lang.source.ast.items()}
+            else :
+                tree = self.lang.source.ast
         return [found for expr in expand(pattern, self.lang)
-                for found in query(expr, self.lang.source.ast)]
-    def run (self, stdin=None, eol=True, timeout=None) :
-        return Run(self, stdin, eol, timeout)
+                for found in query(expr, tree)]
+    def run (self, stdin=None, eol=True, timeout=None, **options) :
+        return Run(self, stdin, eol, timeout, **options)
 
 ##
 ##
@@ -203,7 +210,7 @@ _diag2status = {"info" : PASS,
                 "error" : FAIL}
 
 class Run (_AllTest) :
-    def __init__ (self, test, stdin=None, eol=True, timeout=None) :
+    def __init__ (self, test, stdin=None, eol=True, timeout=None, **options) :
         if stdin :
             text = f"build and execute program with input `{mdesc(stdin)}`"
         else :
@@ -214,6 +221,13 @@ class Run (_AllTest) :
         self.eol = eol
         self._exit_code = None
         self._signal = None
+        self.options = defaultdict(dict)
+        for k, v in options.items() :
+            try :
+                c, n = k.split("_", 1)
+            except :
+                raise TypeError(f"unknown option '{k}'")
+            self.options[c][n] = v
     def __enter__ (self) :
         super().__enter__()
         self.log_path = self.test.add_path(name="run.log", log="run")
@@ -222,9 +236,7 @@ class Run (_AllTest) :
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         self.terminate("end of test")
         self_checks, self.checks = self.checks, []
-        for title, name in (("compile and link", "build"),
-                            ("memory safety checks", "memchk")) :
-            checks = list(getattr(self.test.lang, f"report_{name}")())
+        for title, name, checks in self.test.lang.checks() :
             with _AllTest(self, text=title) as test :
                 for status, text, details, info in checks :
                     if info :
@@ -336,7 +348,7 @@ class Run (_AllTest) :
         self.stdout_log = self.test.add_path(name="stdout.log", log="run")
         self.make_sh = self.test.add_path(prefix="make-", suffix=".sh")
         self.test.more_files["src/make.sh"] = self.make_sh
-        self.test.lang.make_script(self.make_sh)
+        self.test.lang.make_script(self.make_sh, **self.options["script"])
         child = pexpect.spawn("firejail",
                               ["--quiet", "--allow-debuggers", "--private=.",
                                "/bin/bash", self.make_sh.name],
@@ -355,6 +367,10 @@ class Run (_AllTest) :
             else :
                 child.send(str(self.stdin))
         return child
+    @cached_property
+    def strace (self) :
+        self.terminate("strace requested")
+        return self.test.lang.strace()
 
 ##
 ##
