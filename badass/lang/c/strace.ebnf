@@ -1,0 +1,62 @@
+@@grammar :: strace
+
+start =
+    time:atom
+    event:( syscall | signal | exit )
+    $
+    ;
+
+syscall =
+    call:call
+    "=" ret:( atom | "?" )
+    info:/.*/
+    ;
+
+call =
+    func:name
+    "(" args:","%{ [ name "=" ] expr } ")"
+    ;
+
+signal =
+    "---" sig:name info:struct "---"
+    ;
+
+exit =
+    "+++" "exited" "with" status:atom "+++"
+    ;
+
+atom =
+    /(?i)[+-]?[\w.]+/
+    ;
+
+name =
+    /\w+/
+    ;
+
+expr =
+    value:( t:string | a:array | s:struct | c:call | v:atom )
+    [ "..." ]
+    [ info:comment ]
+    [ op:operator right:expr ]
+    ;
+
+comment =
+    ?"/\*(\*(?!/)|[^*])*\*/"
+    ;
+    
+string =
+    /(?i)\"[^\"]*\"/
+    ;
+
+array =
+    "[" ","%{ expr } "]"
+    ;
+
+struct =
+    "{" fields:","%{ [ name "=" ] expr } "}"
+    ;
+
+operator =
+    | "&&" | "||" | "==" | "!=" | "<=" | ">="
+    | ?"[\^&|+*/<>%-]"
+    ;
