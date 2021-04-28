@@ -2,7 +2,7 @@ import subprocess, re, pathlib
 
 _line = re.compile(r"^([|\s]*--)\s*(\w+)\s*"
                    r"<(\d+)?:?(\d+)?\.\.(\d+)?:?(\d+)?>"
-                   r"\s*`?(.*?)`?$")
+                   r"\s*(?:`(.*)`)$")
 
 class cnip (object) :
     def __init__ (self, **attr) :
