@@ -1,8 +1,8 @@
 import subprocess, re, pathlib
 
 _line = re.compile(r"^([|\s]*--)\s*(\w+)\s*"
-                   r"<(\d+):(\d+)\.\.(\d+):(\d+)>"
-                   "\s*`(.*)`$")
+                   r"<(\d+)?:?(\d+)?\.\.(\d+)?:?(\d+)?>"
+                   r"\s*`?(.*?)`?$")
 
 class cnip (object) :
     def __init__ (self, **attr) :
@@ -23,7 +23,7 @@ class cnip (object) :
         else :
             return self.src
     @classmethod
-    def parse (cls, path) :
+    def parse (cls, path, errors=False) :
         stdout = subprocess.check_output(["cnip", path, "--C-dump-AST"],
                                          stderr=subprocess.DEVNULL,
                                          encoding="utf-8",
@@ -46,10 +46,10 @@ class cnip (object) :
                 indent, name, l1, c1, l2, c2, snippet = match.groups()
                 node = cls(kind=name,
                            root=root,
-                           start_line=int(l1),
-                           end_line=int(l2),
-                           start_char=int(c1),
-                           end_char=int(c2),
+                           start_line=int(l1 or 0),
+                           end_line=int(l2 or 0),
+                           start_char=int(c1 or 0),
+                           end_char=int(c2 or 0),
                            snippet=snippet,
                            children=[],
                            _indent=indent)
@@ -66,7 +66,7 @@ class cnip (object) :
                     _pop()
                     stack.append(node)
                     stack[-2].children.append(node)
-            else :
+            elif errors :
                 raise ValueError(line)
         while stack :
             _pop()

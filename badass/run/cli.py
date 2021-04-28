@@ -9,6 +9,8 @@ def add_arguments (sub) :
     sub.add_argument("-d", "--define", type=str, action="append", default=[],
                      metavar="NAME[=VALUE]",
                      help="pass NAME to the script (True if VALUE is omitted)")
+    sub.add_argument("--debug", action="store_true", default=False,
+                     help="print ignored exceptions")
     sub.add_argument("script", type=str,
                      help="path to script")
     sub.add_argument("project", type=str,

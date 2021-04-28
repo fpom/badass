@@ -1,10 +1,11 @@
-import json, os, ast
+import json, os, ast, sys
 
 from pathlib import Path
 from shutil import copytree, rmtree
 from time import sleep
 from zipfile import ZipFile, ZIP_LZMA
 from collections import defaultdict
+from traceback import print_tb as _print_tb
 
 from ..lang import load as load_lang
 from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc
@@ -13,6 +14,18 @@ from .report import Report
 
 import pexpect
 from pexpect.exceptions import EOF, TIMEOUT
+
+try :
+    from colored_traceback import Colorizer
+    coltb = Colorizer(style="default")
+    def print_tb (exc_type, exc_val, exc_tb) :
+        coltb.colorize_traceback(exc_type, exc_val, exc_tb)
+        coltb.stream.write("\n")
+except ImportError :
+    def print_tb (exc_type, exc_val, exc_tb) :
+        print("Traceback (most recent call last):", file=sys.stderr)
+        _print_tb(exc_tb, file=sys.stderr)
+        print(f"{exc_type.__name__}: {exc_val}", file=sys.stderr)
 
 ##
 ##
@@ -90,6 +103,8 @@ class _NestedTest (_Test) :
         if exc_type is None :
             self.status = self._reduce(t.status for t in self.checks)
         else :
+            if CONFIG.debug :
+                print_tb(exc_type, exc_val, exc_tb)
             self.status = FAIL
         self.test.checks.append(self)
         return True
@@ -149,6 +164,8 @@ class Test (_Test) :
         if exc_type is None :
             self.status = _AllTest._reduce(self, (t.status for t in self.checks))
         else :
+            if CONFIG.debug :
+                print_tb(exc_type, exc_val, exc_tb)
             self.status = FAIL
         with (self.report_dir / "test.json").open("w", **encoding) as out :
             json.dump(self, out, ensure_ascii=False, cls=JSONEncoder)
