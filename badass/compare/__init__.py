@@ -86,17 +86,30 @@ class Dist (object) :
         tree = to_tree(cg.dendrogram_row.calculated_linkage)
         if prune and tree.dist :
             leaves = set()
-            todo = [tree]
-            while todo :
-                node = todo.pop()
-                if node.dist / tree.dist <= prune :
-                    if node.get_count() > 1 :
-                        leaves.update(node.pre_order(self._leaves))
-                else :
-                    if node.left :
-                        todo.append(node.left)
-                    if node.right :
-                        todo.append(node.right)
+            if 0 < prune < 1 :
+                todo = [tree]
+                while todo :
+                    node = todo.pop()
+                    if node.dist / tree.dist <= prune :
+                        if node.get_count() > 1 :
+                            leaves.update(node.pre_order(self._leaves))
+                    else :
+                        if node.left :
+                            todo.append(node.left)
+                        if node.right :
+                            todo.append(node.right)
+            elif prune > 1 :
+                forest = [tree]
+                def sort_key (node) :
+                    return node.dist, -node.get_count()
+                while sum(node.get_count() for node in forest) > prune :
+                    node = forest.pop(-1)
+                    for child in (node.left, node.right) :
+                        if child and child.get_count() > 1 :
+                            forest.append(child)
+                    forest.sort(key=sort_key)
+                for node in forest :
+                    leaves.update(node.pre_order(self._leaves))
             leaves.discard(None)
             if len(leaves) > 1 :
                 dist = self.dist[self.dist.index.isin(leaves)][[str(l) for l in leaves]]

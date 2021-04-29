@@ -11,8 +11,9 @@ def add_arguments (sub) :
                      help="additional options for heatmap")
     sub.add_argument("--maxsize", metavar="COUNT", type=int, default=0,
                      help="split heatmap into clusters of at most COUNT projects")
-    sub.add_argument("--prune", metavar="HEIGHT", type=float, default=0,
-                     help="prune heatmap at 0 (no pruning) < HEIGHT < 1 (prune all)")
+    sub.add_argument("--prune", metavar="VALUE", type=float, default=0,
+                     help=("prune heatmap at 0 (no pruning) < VALUE < 1 (prune all),"
+                           " or when no more than VALUE > 1 projects are left"))
     sub.add_argument("--absolute", default=False, action="store_true",
                      help="draw heatmap with absolute colors")
     sub.add_argument("--load", default=None, action="store", type=str, metavar="CSV",
