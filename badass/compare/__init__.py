@@ -112,8 +112,12 @@ class Dist (object) :
                     leaves.update(node.pre_order(self._leaves))
             leaves.discard(None)
             if len(leaves) > 1 :
+                _kw = kw_sns.copy()
+                if len(leaves) < 55 :
+                    _kw.setdefault("xticklabels", 1)
+                    _kw.setdefault("yticklabels", 1)
                 dist = self.dist[self.dist.index.isin(leaves)][[str(l) for l in leaves]]
-                sub = sns.clustermap(dist.fillna(0), **kw_sns)
+                sub = sns.clustermap(dist.fillna(0), **_kw)
                 plt.setp(sub.ax_heatmap.yaxis.get_majorticklabels(), rotation=0)
                 plt.setp(sub.ax_heatmap.xaxis.get_majorticklabels(), rotation=90)
                 target = str(path.parent / f"{path.stem}-pruned{path.suffix}")
