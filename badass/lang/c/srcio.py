@@ -114,3 +114,58 @@ class Source (object) :
                 else :
                     out.write(line)
         self.parse(path)
+
+class ASTPrinter (object) :
+    IMPORTANT = {"clang" : ["kind", "id"],
+                 "cnip" : ["kind"]}
+    GROUP = {"clang" : {},
+             "cnip" : {("start_line", "end_line") : "line: {start_line}:{end_line}",
+                       ("start_char", "end_char") : "char: {start_char}:{end_char}"}}
+    CHILDREN = {"clang" : ["inner"],
+                "cnip" : ["children"]}
+    FORMAT = {"clang" : {"qualType" : "{val!r}"},
+              "cnip" : {"snippet" : "{val!r}"}}
+    IGNORE = {"clang" : [],
+              "cnip" : ["src"]}
+    def __init__ (self, tree, parser) :
+        self.parser = parser
+        self.important = self.IMPORTANT[parser]
+        self.children = self.CHILDREN[parser]
+        self.group = self.GROUP[parser]
+        self.format = self.FORMAT[parser]
+        self.ignore = (set(self.IGNORE[parser])
+                       | set(self.IMPORTANT[parser])
+                       | set(self.CHILDREN[parser]))
+        self(tree)
+    def __call__ (self, tree, indent="") :
+        ignore = set(self.ignore)
+        for k in self.important :
+            if k in tree :
+                print(f"{indent}{k}: {tree[k]}")
+        for g, l in self.group.items() :
+            try :
+                line = l.format(**tree)
+                print(f"{indent}{line}")
+                ignore.update(g)
+            except :
+                pass
+        for k, v in tree.items() :
+            if k in self.ignore :
+                continue
+            elif not v :
+                continue
+            elif k in self.format :
+                try :
+                    print(f"{indent}{k}:", self.format[k].format(val=v))
+                except :
+                    print(f"{indent}{k}: {v}")
+            elif isinstance(v, dict) :
+                print(f"{indent}{k}:")
+                self(v, indent + "  ")
+            else :
+                print(f"{indent}{k}: {v}")
+        for c in self.children :
+            for sub in tree.get(c, []) :
+                self(sub, indent + "  ")
+
+print_ast = ASTPrinter

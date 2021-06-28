@@ -7,7 +7,7 @@ from .. import BaseLanguage
 from ... import tree, encoding, cached_property, mdesc
 from .drmem import parse as drparse
 from .strace import STrace
-from .srcio import Source
+from .srcio import Source, print_ast
 
 class Language (BaseLanguage) :
     SUFFIX = ".c"
