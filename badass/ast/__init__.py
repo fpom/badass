@@ -2,9 +2,9 @@ from pathlib import Path
 from ..lang import load as load_lang
 
 def dump (path, parser, lang) :
-    path = Path(path)
     mod = load_lang(lang)
-    src = mod.Source(path.parent,  [path])
+    src = mod.Source(Path(path))
+    key = next(iter(src.ast))
     if not parser :
-        parser = next(iter(src.ast[path.name]))
-    mod.print_ast(src.ast[path.name][parser], parser)
+        parser = next(iter(src.ast[key]))
+    mod.ASTPrinter(src.ast[key][parser], parser)

@@ -1,8 +1,11 @@
 import subprocess, json, io, collections, pathlib
 
+from pathlib import Path
+
 from ...run.queries import query
 from ... import encoding, tree, recode
 from .cnip import cnip
+from .. import BaseASTPrinter
 
 def _cc1 (src) :
     cc = subprocess.run(["clang", "-cc1", "-ast-dump=json"],
@@ -35,16 +38,30 @@ def tidy (sig, decl=None) :
             return obj["type"]["qualType"]
 
 class Source (object) :
-    def __init__ (self, base_dir, source_files) :
-        self.base_dir = base_dir
+    def __init__ (self, *paths) :
+        self.base_dir = None
+        files = []
+        for path in (Path(p) for p in paths) :
+            if self.base_dir is None :
+                if path.is_dir() :
+                    self.base_dir = path
+                else :
+                    self.base_dir = path.parent
+            if path.is_dir() :
+                # check if it's relative to identified base directory
+                path.relative_to(self.base_dir)
+                files.extend(path.glob("*.[ch]"))
+            else :
+                # check if it's relative to identified base directory
+                path.relative_to(self.base_dir)
+                files.append(path)
         self.ast = {}
         self.obj = {}
         self.sig = collections.defaultdict(list)
         self.src = {}
-        for path in source_files :
-            if path.match("*.[ch]") :
-                recode(path)
-                self.parse(path)
+        for path in files :
+            recode(path)
+            self.parse(path)
     def parse (self, path) :
         _path = str(path.relative_to(self.base_dir))
         source = io.StringIO()
@@ -115,7 +132,7 @@ class Source (object) :
                     out.write(line)
         self.parse(path)
 
-class ASTPrinter (object) :
+class ASTPrinter (BaseASTPrinter) :
     IMPORTANT = {"clang" : ["kind", "id"],
                  "cnip" : ["kind"]}
     GROUP = {"clang" : {},
@@ -127,45 +144,3 @@ class ASTPrinter (object) :
               "cnip" : {"snippet" : "{val!r}"}}
     IGNORE = {"clang" : [],
               "cnip" : ["src"]}
-    def __init__ (self, tree, parser) :
-        self.parser = parser
-        self.important = self.IMPORTANT[parser]
-        self.children = self.CHILDREN[parser]
-        self.group = self.GROUP[parser]
-        self.format = self.FORMAT[parser]
-        self.ignore = (set(self.IGNORE[parser])
-                       | set(self.IMPORTANT[parser])
-                       | set(self.CHILDREN[parser]))
-        self(tree)
-    def __call__ (self, tree, indent="") :
-        ignore = set(self.ignore)
-        for k in self.important :
-            if k in tree :
-                print(f"{indent}{k}: {tree[k]}")
-        for g, l in self.group.items() :
-            try :
-                line = l.format(**tree)
-                print(f"{indent}{line}")
-                ignore.update(g)
-            except :
-                pass
-        for k, v in tree.items() :
-            if k in self.ignore :
-                continue
-            elif not v :
-                continue
-            elif k in self.format :
-                try :
-                    print(f"{indent}{k}:", self.format[k].format(val=v))
-                except :
-                    print(f"{indent}{k}: {v}")
-            elif isinstance(v, dict) :
-                print(f"{indent}{k}:")
-                self(v, indent + "  ")
-            else :
-                print(f"{indent}{k}: {v}")
-        for c in self.children :
-            for sub in tree.get(c, []) :
-                self(sub, indent + "  ")
-
-print_ast = ASTPrinter

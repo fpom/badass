@@ -1,13 +1,12 @@
 import io, json, sys
 
-from shlex import quote
 from hadlib import getopt
 
 from .. import BaseLanguage
 from ... import tree, encoding, cached_property, mdesc
 from .drmem import parse as drparse
 from .strace import STrace
-from .srcio import Source, print_ast
+from .srcio import Source, ASTPrinter
 
 class Language (BaseLanguage) :
     SUFFIX = ".c"
@@ -18,38 +17,28 @@ class Language (BaseLanguage) :
     IGNORE = {"ISO C does not support the 'm' scanf flag"}
     def __init__ (self, test) :
         super().__init__(test)
+        self.dir = self.test.test_dir
         self.log = []
-        self.mem = self.test.log_dir / "memchk"
-        self.mem.mkdir(parents=True, exist_ok=True)
-        self._strace = self.test.log_dir / "strace"
-        self._strace.mkdir(parents=True, exist_ok=True)
     @cached_property
     def source (self) :
-        return Source(self.test.test_dir, self.test.source_files)
+        return Source(self.test.test_dir/ "src")
     def add_source (self, source, path) :
         self.source.add(source, path)
     def del_source (self, name) :
         self.source.discard(name)
     def decl (self, sig, decl=None) :
         return self.source.decl(sig, decl)
-    def __getitem__ (self, path) :
-        try :
-            path = path.relative_to(self.test.test_dir)
-        except :
-            pass
-        return quote(str(path))
-    def make_script (self, path, trace="drmem") :
-        with path.open("w", **encoding) as script :
-            for sub in ("build", "run", "memchk") :
-                script.write(f"mkdir -p {self[self.test.log_dir / sub]}\n")
-            self.pid = self.test.add_path(name="make.pid", log="build")
-            script.write(f"echo $$ > {self[self.pid]}\n")
-            self.env = self.test.add_path(name="make.env", log="build")
-            script.write(f"env > {self[self.env]}\n"
-                         f"echo '######' >> {self[self.env]}\n"
-                         f"echo GCC=$(which gcc) >> {self[self.env]}\n"
-                         f"echo GCC_VERSION=$(gcc --version) >> {self[self.env]}\n"
-                         f"echo DRMEMORY=$(which drmemory) >> {self[self.env]}\n")
+    def make_script (self, trace="drmem") :
+        make_path = self.dir / "make.sh"
+        with make_path.open("w", **encoding) as script :
+            for sub in ("build", "run", "memchk", "strace") :
+                script.write(f"mkdir -p log/{sub}\n")
+            script.write(f"echo $$ > log/build/make.pid\n"
+                         f"env > log/build/make.env\n"
+                         f"echo '######' >> log/build/make.env\n"
+                         f"echo GCC=$(which gcc) >> log/build/make.env\n"
+                         f"echo GCC_VERSION=$(gcc --version) >> log/build/make.env\n"
+                         f"echo DRMEMORY=$(which drmemory) >> log/build/make.env\n")
             # compile sources
             lflags = set()
             obj_files = []
@@ -57,50 +46,55 @@ class Language (BaseLanguage) :
                 if not path.match("*.c") :
                     continue
                 base = "-".join(path.parts)
-                out = self.test.add_path(name=f"{base}.stdout", log="build")
-                err = self.test.add_path(name=f"{base}.stderr", log="build")
-                ret = self.test.add_path(name=f"{base}.status", log="build")
+                out = f"log/build/{base}.stdout"
+                err = f"log/build/{base}.stderr"
+                ret = f"log/build/{base}.status"
                 obj = path.with_suffix(".o")
-                obj_files.append(obj)
-                cf, lf = getopt([self.test.test_dir / path], "linux", "gcc")
+                obj_files.append(str(obj))
+                cf, lf = getopt([self.dir / "src" / path], "linux", "gcc")
                 lflags.update(lf)
                 gcc = (f"gcc -c"
                        f" -g -fno-inline -fno-omit-frame-pointer -std=c11"
                        f" -Wall -Wpedantic"
-                       f" {' '.join(cf)} {self[path]} -o {self[obj]}")
-                script.write(f"rm -f {self[obj]}\n"
-                             f"{gcc} -fdiagnostics-format=json > {self[out]} 2> {self[err]}\n"
-                             f"echo $? > {self[ret]}\n")
-                self.log.append(["compile", self[path], gcc,
+                       f" {' '.join(cf)}"
+                       f" {path}"
+                       f" -o {obj}")
+                script.write(f"rm -f {obj}\n"
+                             # put -fdiagnostics-format=json here
+                             # to hide it from user-visible logs
+                             f"(cd src ; {gcc} -fdiagnostics-format=json)"
+                             f" > {out} 2> {err}\n"
+                             f"echo $? > {ret}\n")
+                self.log.append(["compile", path, gcc,
                                  tree(stdout=out, stderr=err, exit_code=ret)])
             # link executable
-            out = self.test.add_path(name=f"link.stdout", log="build")
-            err = self.test.add_path(name=f"link.stderr", log="build")
-            ret = self.test.add_path(name=f"link.status", log="build")
-            obj = " ".join(self[o] for o in obj_files)
-            gcc = f"gcc {obj} {' '.join(lflags)}"
-            script.write(f"rm -f a.out\n"
-                         f"{gcc} > {self[out]} 2> {self[err]}\n"
-                         f"echo $? > {self[ret]}\n")
+            out = "log/build/link.stdout"
+            err = "log/build/link.stderr"
+            ret = "log/build/link.status"
+            gcc = f"gcc {' '.join(obj_files)} {' '.join(lflags)}"
+            script.write(f"rm -f src/a.out\n"
+                         f"(cd src ; {gcc}) > {out} 2> {err}\n"
+                         f"echo $? > {ret}\n")
             self.log.append(["link", "a.out", gcc,
                              tree(stdout=out, stderr=err, exit_code=ret)])
             # run program
             if trace == "drmem" :
-                trace = (f"drmemory -quiet -logdir {self[self.mem]}"
+                trace = (f"drmemory -quiet -logdir log/memchk"
                          " -callstack_srcfile_prefix $(pwd) --")
             elif trace == "strace" :
-                trace = f"strace -r -ff -xx -v -o {self[self._strace]}/log"
+                trace = f"strace -r -ff -xx -v -o log/strace/log"
             else :
                 raise ValueError(f"unknown tracing method '{trace}'")
-            err = self.test.add_path(name=f"run.stderr", log="run")
-            ret = self._ret = self.test.add_path(name=f"run.status", log="run")
-            script.write(f"{trace} ./a.out 2> {self[err]}\n"
-                         f"echo $? > {self[ret]}\n"
+            err = "log/run/run.stderr"
+            ret = "log/run/run.status"
+            script.write(f"{trace} ./src/a.out 2> {err}\n"
+                         f"echo $? > {ret}\n"
                          f"echo\n"
                          f"exit 0")
+        return make_path, None
     @property
     def exit_code (self) :
-        ret = self._ret.read_text(**encoding).strip()
+        ret = (self.dir / "log/run/run.status").read_text(**encoding).strip()
         try :
             return int(ret)
         except :
@@ -111,12 +105,12 @@ class Language (BaseLanguage) :
         if checks :
             yield "memory safety checks", "memchk", checks
     def strace (self) :
-        return STrace(self._strace)
+        return STrace(self.dir / "log/strace")
     def report_build (self) :
         for action, path, cmd, stdio in self.log :
-            success = stdio.exit_code.read_text(**encoding).strip() == "0"
+            success = (self.dir / stdio.exit_code).read_text(**encoding).strip() == "0"
             info = []
-            stderr = stdio.stderr.read_text(**encoding)
+            stderr = (self.dir / stdio.stderr).read_text(**encoding)
             try :
                 diagnostics = json.loads(stderr)
             except :
@@ -150,10 +144,10 @@ class Language (BaseLanguage) :
             yield success, f"{action} `{path}`", f"`$ {cmd}`", info
     def report_memchk (self) :
         memchk = {}
-        for path in self.mem.glob("DrMemory*/results.txt") :
+        for path in (self.dir / "log/memchk").glob("DrMemory*/results.txt") :
             res = drparse(path)
             memchk[res.pid] = res
-        make_pid = int(self.pid.read_text(**encoding))
+        make_pid = int((self.dir / "log/build/make.pid").read_text(**encoding))
         for pid, res in sorted(memchk.items()) :
             for num, info in sorted(res.errors.items()) :
                 details = io.StringIO()

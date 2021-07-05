@@ -1,11 +1,13 @@
-import json, os, ast, sys
+import json, os, ast, sys, uuid
 
 from pathlib import Path
-from shutil import copytree, rmtree
+from shutil import copytree, rmtree, copy2 as copy
 from time import sleep
 from zipfile import ZipFile, ZIP_LZMA
 from collections import defaultdict
 from traceback import print_tb as _print_tb
+from tempfile import mkdtemp, mkstemp
+from subprocess import run as subprocess_run, PIPE, STDOUT
 
 from ..lang import load as load_lang
 from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc
@@ -33,6 +35,71 @@ except ImportError :
 
 CONFIG = tree()
 ARGS = tree()
+
+##
+##
+##
+
+class Repository (object) :
+    def __init__ (self, basedir) :
+        self.base = Path(basedir)
+        self.content = {}
+    def __iter__ (self) :
+        yield from self.content.items()
+    def walk (self, root=None) :
+        if root is None :
+            root = self.base
+        else :
+            root = Path(root)
+        if root.is_file() :
+            yield root
+        elif root.is_dir() :
+            for path in root.iterdir() :
+                if path.is_file() :
+                    yield path
+                elif path.is_dir() :
+                    yield from self.walk(path)
+    def update (self, *roots, normalise=True) :
+        if roots :
+            tops = [Path(p) for r in roots for p in self.base.glob(r)]
+        else :
+            tops = [self.base]
+        for root in tops :
+            for path in self.walk(root) :
+                if normalise :
+                    path = path.rename(path.with_suffix(path.suffix.lower()))
+                self.add(path)
+    def add (self, path) :
+        relpath = self.content[path] = Path(path).relative_to(self.base)
+        return relpath
+    def new (self, path) :
+        path = Path(path)
+        base = self.base / path.parent
+        base.mkdir(exist_ok=True, parents=True)
+        path = base / path.name
+        if path.exists() :
+            fd, path = mkstemp(prefix=path.stem + "-", suffix=path.suffix, dir=base)
+            os.close(fd)
+            path = Path(path)
+        else :
+            path.touch()
+        self.add(path)
+        return path
+    def copy (self, src, dst) :
+        src, dst = Path(src), Path(dst)
+        dst.parent.mkdir(exist_ok=True, parents=True)
+        copy(src, dst)
+        self.add(dst)
+    def copytree (self, src, dst) :
+        src = self.base / src
+        dst = self.base / dst
+        for path in self.walk(src) :
+            self.copy(path, dst / path.relative_to(src))
+    def zip (self, path) :
+        with Path(path).open("wb") as out :
+            with ZipFile(out, "w", compression=ZIP_LZMA, compresslevel=9) as zf :
+                for path, alias in self :
+                    zf.write(path, alias)
 
 ##
 ##
@@ -135,31 +202,17 @@ class Test (_Test) :
     def __init__ (self, text) :
         super().__init__(text)
         self.project_dir = Path(CONFIG.project)
-        self.lang_class = load_lang(CONFIG.lang)
+        self.lang_mod = load_lang(CONFIG.lang)
         self.num = self.__class__.NUM = self.__class__.NUM + 1
-    def __enter__ (self) :
         self.test_dir = self.project_dir / f"test-{self.num:03}"
-        copytree(self.project_dir / "src", self.test_dir)
-        for path in self._walk() :
-            norm = path.with_suffix(path.suffix.lower())
-            if path != norm :
-                path.rename(norm)
-        self.source_files = list(self._walk())
-        self.more_files = {}
-        self.log_dir = self.add_path(type="dir", prefix="log-")
-        self.report_dir = self.add_path(type="dir", prefix="report-")
+        self.repo = Repository(self.test_dir)
+    def __enter__ (self) :
+        copytree(self.project_dir / "src", self.test_dir / "src")
+        self.repo.update()
         return self
     @cached_property
     def lang (self) :
-        return self.lang_class.Language(self)
-    def _walk (self, root=None) :
-        if root is None :
-            root = self.test_dir
-        for path in root.iterdir() :
-            if path.is_file() :
-                yield path
-            elif path.is_dir() :
-                yield from self._walk(path)
+        return self.lang_mod.Language(self)
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         if exc_type is None :
             self.status = _AllTest._reduce(self, (t.status for t in self.checks))
@@ -167,41 +220,19 @@ class Test (_Test) :
             if CONFIG.debug :
                 print_tb(exc_type, exc_val, exc_tb)
             self.status = FAIL
-        with (self.report_dir / "test.json").open("w", **encoding) as out :
+        test_json = self.repo.new("test.json")
+        with test_json.open("w", **encoding) as out :
             json.dump(self, out, ensure_ascii=False, cls=JSONEncoder)
+        self.repo.update("log")
         test_zip = self.test_dir.with_suffix(".zip")
-        with test_zip.open("wb") as out :
-            with ZipFile(out, "w", compression=ZIP_LZMA, compresslevel=9) as zf :
-                for path in self.report_dir.glob("*.json") :
-                    zf.write(path, path.name)
-                for path in self.source_files :
-                    zf.write(path, Path("src") / path.relative_to(self.test_dir))
-                for tgt, src in self.more_files.items() :
-                    zf.write(src, tgt)
-                for path in self._walk(self.log_dir) :
-                    zf.write(path, Path("log") / path.relative_to(self.log_dir))
+        self.repo.zip(test_zip)
         if not CONFIG.keep :
             rmtree(self.test_dir, ignore_errors=True)
         self.TESTS.append(test_zip)
         return True
-    def add_path (self, log=None, name=None, **args) :
-        if log is True :
-            args["dir"] = self.log_dir
-        elif log :
-            args["dir"] = self.log_dir / log
-        else :
-            args["dir"] = self.test_dir
-        if name :
-            path = args["dir"] / name
-            path.parent.mkdir(exist_ok=True, parents=True)
-            path.open("w").close()
-            return path
-        else :
-            return new_path(**args)
     def add_source (self, source) :
-        path = self.add_path(prefix="test-", suffix=self.lang.SUFFIX)
+        path = self.repo.new(f"src/test{self.lang.SUFFIX}")
         self.lang.add_source(source, path)
-        self.source_files.append(path)
     def del_source (self, name) :
         self.lang.del_source(name)
     def has (self, signature, declarations=None) :
@@ -238,6 +269,7 @@ class Run (_AllTest) :
         self.eol = eol
         self._exit_code = None
         self._signal = None
+        self._stop = None
         self.options = defaultdict(dict)
         for k, v in options.items() :
             try :
@@ -247,7 +279,7 @@ class Run (_AllTest) :
             self.options[c][n] = v
     def __enter__ (self) :
         super().__enter__()
-        self.log_path = self.test.add_path(name="run.log", log="run")
+        self.log_path = self.test.repo.new("log/run/run.log")
         self.log = self.log_path.open("w", **encoding)
         return self
     def __exit__ (self, exc_type, exc_val, exc_tb) :
@@ -313,7 +345,24 @@ class Run (_AllTest) :
     def terminate (self, reason=None) :
         if self.terminated :
             return
+        # ensure that process has been started
+        self.process
         self._exit_reason = reason
+        if self._stop is not None :
+            self.log.write("terminate: requesting program to stop\n")
+            sleep(self.timeout)
+            log = self.test.repo.new("log/run/stop.log")
+            done = subprocess_run(["firejail", "--quiet",
+                                   f"--join={self._jail}",
+                                   "/bin/bash", str(self._stop.name)],
+                                  stdout=PIPE, stderr=STDOUT, **encoding,
+                                  cwd=str(self.test.test_dir),
+                                  env={var : os.environ[var]
+                                       for var in ("PATH", "TERM", "LC_ALL")
+                                       if var in os.environ})
+            with log.open("w", **encoding) as out :
+                out.write(done.stdout)
+            sleep(1)
         try :
             self.log.write("terminate: reading until EOF\n")
             self.process.expect(pexpect.EOF)
@@ -362,13 +411,16 @@ class Run (_AllTest) :
         return self._signal
     @cached_property
     def process (self) :
-        self.stdout_log = self.test.add_path(name="stdout.log", log="run")
-        self.make_sh = self.test.add_path(prefix="make-", suffix=".sh")
-        self.test.more_files["src/make.sh"] = self.make_sh
-        self.test.lang.make_script(self.make_sh, **self.options["script"])
+        self.stdout_log = self.test.repo.new("log/run/stdout.log")
+        script, self._stop = self.test.lang.make_script(**self.options["script"])
+        self.test.repo.add(script)
+        if self._stop is not None :
+            self.test.repo.add(self._stop)
+        self._jail = uuid.uuid4().hex
         child = pexpect.spawn("firejail",
                               ["--quiet", "--allow-debuggers", "--private=.",
-                               "/bin/bash", self.make_sh.name],
+                               f"--name={self._jail}",
+                               "/bin/bash", str(script.name)],
                               cwd=str(self.test.test_dir),
                               timeout=self.timeout,
                               echo=False,

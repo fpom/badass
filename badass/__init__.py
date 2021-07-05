@@ -72,6 +72,7 @@ def recode (path) :
         return
     with open(path, "w", **encoding) as out :
         out.write(src)
+    return src
 
 def md (text, inline=True) :
     # only load if necessary to speedup prog startup
