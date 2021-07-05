@@ -67,7 +67,9 @@ class Repository (object) :
         for root in tops :
             for path in self.walk(root) :
                 if normalise :
-                    path = path.rename(path.with_suffix(path.suffix.lower()))
+                    newpath = path.with_suffix(path.suffix.lower())
+                    path.rename(newpath)
+                    path = newpath
                 self.add(path)
     def add (self, path) :
         relpath = self.content[path] = Path(path).relative_to(self.base)
