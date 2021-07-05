@@ -28,6 +28,13 @@ def walk (path=None) :
 
 data = list(walk())
 
+tslib = root / "lang" / "tslib.so"
+if not tslib.exists() :
+    import runpy
+    runpy.run_path("mktslibs.py")
+
+data.append(str(tslib.relative_to(root)))
+
 setup(name="not-so-badass",
       version=version,
       description="(not so) bad assessments",
@@ -54,6 +61,7 @@ setup(name="not-so-badass",
                         "jsonpath-ng",
                         "Pygments",
                         "tatsu",
+                        "tree_sitter",
                         "sympy"],
       package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
