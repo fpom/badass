@@ -4,4 +4,5 @@ CONFIG.lang = "processing"
 
 with Test("program prints 'Hello world!'") as test :
     with test.run() as run :
-        run.stdout.strip() == "Hello world!"
+        run.get("Hello world!")
+
