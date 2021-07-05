@@ -42,7 +42,8 @@ class cnip (object) :
             last = stack.pop(-1)
             del last._attr["_indent"]
         for line in lines :
-            if match := _line.match(line) :
+            match = _line.match(line)
+            if match :
                 indent, name, l1, c1, l2, c2, snippet = match.groups()
                 node = cls(kind=name,
                            root=root,
