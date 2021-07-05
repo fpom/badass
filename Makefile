@@ -1,5 +1,5 @@
 install:
-	python3 setup.py install --user
+	python3 setup.py install --user --force
 	make clean
 
 pip: clean

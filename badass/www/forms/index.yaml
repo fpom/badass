@@ -14,3 +14,19 @@
     - Test:
         - title: factorial
         - path: fact.bad
+- AnotherCourse:
+    - title: Processing programming
+    - path: scripts/processing
+    - form :
+        - label:
+            - for: source
+            - text: Source file(s)
+        - input:
+            - type: file
+            - name: source
+            - multiple: ""
+            - accept: ".pde"
+    - chose: exercise
+    - Test:
+        - title: hello world
+        - path: hello.bad
