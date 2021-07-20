@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .. import BaseLanguage, BaseASTPrinter
 from ... import tree, encoding, cached_property, mdesc, recode
-from .parser import parse
+from .parser import SourceTree, tidy
 
 class Source (object) :
     def __init__ (self, *paths) :
@@ -26,21 +26,59 @@ class Source (object) :
                 path.relative_to(self.base_dir)
                 files.append(path)
         self.ast = {}
+        self.tree = {}
         self.obj = {}
-        self.sig = collections.defaultdict(list)
-        self.src = {}
         for path in files :
             recode(path)
             self.parse(path)
     def parse (self, path) :
-        ast = parse(path.read_text(**encoding))
-        self.ast[str(path.relative_to(self.base_dir))] = {"treesitter" : ast}
-    def add (self, source, path) :
-        pass
-    def discard (self, name) :
-        pass
+        _path = str(path.relative_to(self.base_dir))
+        tree = self.tree[_path] = SourceTree.parse(path)
+        self.ast[_path] = {"treesitter" : {"kind" : f"{tree.kind}_program",
+                                           "children" : list(tree.dump_all())}}
+    def _add_obj (self, tree) :
+        for method in tree("(method_declaration) @method")["method"] :
+            q = """(method_declaration
+                     type: (_) @type
+                     name: (_) @name
+                     parameters: (_
+                                   (formal_parameter)* @params
+            ))"""
+            match = tree(q, method)
+            if match :
+                nam = tree[match["name"][0]]
+                typ = tree[match["type"][0]]
+                par = ", ".join(tree[n] for n in match.get("params", []))
+                sig = tidy(f"{typ} {nam}({par})")
+                self.obj[nam] = self.obj[sig] = (tree, method)
     def decl (self, sig, decl=None) :
-        pass
+        if decl is not None :
+            raise ValueError("parameter 'decl' not supported by language")
+        sig = sig.strip()
+        if sig not in self.obj :
+            sig = tidy(sig)
+        if sig in self.obj :
+            tree, node = self.obj[sig]
+            return tree.dump(node)
+        else :
+            return None
+    def add (self, source, path) :
+        with path.open("w", **encoding) as out :
+            out.write(source)
+        self.parse(path)
+    def discard (self, name) :
+        old, node = self.obj[name]
+        _path = str(old.path.relative_to(self.base_dir))
+        new = old.discard(node)
+        if new :
+            self.ast[_path] = {"treesitter" : {"kind" : f"{new.kind}_program",
+                                               "children" : list(new.dump_all())}}
+            for key in [k for k, (_, n) in self.obj.items() if n is node] :
+                del self.obj[key]
+        else :
+            del self.ast[_path]
+            for key in [k for k, (s, _) in self.obj.items() if s is old] :
+                del self.obj[key]
 
 class ASTPrinter (BaseASTPrinter) :
     IMPORTANT = {"treesitter" : ["kind"]}
