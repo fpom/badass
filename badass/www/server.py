@@ -399,7 +399,7 @@ def marks () :
     argv = ["python3", "-m", "badass", "report", "-p", path, "-b", base]
     for exo in form["exercise"] :
         argv.extend(["-e", exo])
-    for grp in form["group"] :
-        argv.extend(students.groups[grp])
+    for grp in list(form["group"]) :
+        argv.extend(students.groups[grp.replace(" ", "_")])
     check_output(argv, env=ENV)
     return send_file(path.open("rb"), as_attachment=True, attachment_filename=path.name)
