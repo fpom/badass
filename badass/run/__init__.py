@@ -76,7 +76,7 @@ class Repository (object) :
         return relpath
     def new (self, path) :
         path = Path(path)
-        print(f"path = {path}")
+        print(f"new path = {path}")
         base = self.base / path.parent
         print(f"base = {base}")
         base.mkdir(exist_ok=True, parents=True)
