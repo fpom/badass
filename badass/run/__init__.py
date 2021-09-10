@@ -81,12 +81,12 @@ class Repository (object) :
         print(f"base = {base}")
         base.mkdir(exist_ok=True, parents=True)
         path = base / path.name
-        print(f"path = {path}")
+        print(f"/ path = {path}")
         if path.exists() :
             fd, path = mkstemp(prefix=path.stem + "-", suffix=path.suffix, dir=base)
             os.close(fd)
             path = Path(path)
-            print(f"path = {path}")
+            print(f"* path = {path}")
         else :
             path.touch()
         self.add(path)
