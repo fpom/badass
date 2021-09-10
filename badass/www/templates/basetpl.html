@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{% block title %}{% endblock %}</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('asset', kind='s', name='jquery.mobile-1.4.5.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('asset', kind='t', name='style.css') }}"/>
+    <script src="{{ url_for('asset', kind='s', name='jquery-1.11.1.min.js') }}"></script>
+    <script src="{{ url_for('asset', kind='s', name='jquery.mobile-1.4.5.min.js') }}"></script>
+    <link rel="shortcut icon" href="{{ url_for('asset', kind='s', name='favicon.ico') }}">
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <div data-role="page">
+      <div data-role="header">
+        {% block navbar %}
+        {% if current_user.is_authenticated %}
+        <div data-role="navbar">
+          <li><a href="/user/{{ current_user.get_id() }}">account</a></li>
+          {% if current_user.has_role("teacher") %}
+          <li><a href="/teacher">teacher</a></li>
+          {% endif %}
+          {% if current_user.has_role("admin") %}
+          <li><a href="/users">users</a></li>
+          {% endif %}
+          {% if current_user.has_role("developer") %}
+          <li><a href="/erros">errors</a></li>
+          {% endif %}
+          <li><a href="/logout">logout</a></li>
+        </div>
+        {% endif %}
+        {% endblock %}
+        <h1>{% block title %}{% endblock %}</h1>
+      </div>
+      <div data-role="main" class="ui-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul>
+          {% for category, message in messages %}
+          <li class="alert alert-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </body>
+</html> 

@@ -1,33 +1,7 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>{{ err.code }} - {{ err.name }}</title>
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="{{ url_for('asset', kind='s', name='jquery.mobile-1.4.5.min.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('asset', kind='t', name='style.css') }}"/>
-    <script src="{{ url_for('asset', kind='s', name='jquery-1.11.1.min.js') }}"></script>
-    <script src="{{ url_for('asset', kind='s', name='jquery.mobile-1.4.5.min.js') }}"></script>
-    <link rel="shortcut icon" href="{{ url_for('asset', kind='s', name='favicon.ico') }}">
-  </head>
-  <body>
-    <div data-role="page">
-      <div data-role="header">
-        <h1>{{ err.code }} - {{ err.name }}</h1>
-      </div>
-      <div data-role="main" class="ui-content">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        <ul>
-          {% for category, message in messages %}
-          <li class="alert alert-{{ category }}">{{ message }}</li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-        {% endwith %}
+{% extends "basetpl.html" %}
+{% block title %}{{ err.code }} - {{ err.name }}{% endblock %}
+{% block content %}
         <div class="alert alert-http">
           {{ err.description }}
         </div>
-      </div>
-    </div>
-  </body>
-</html>
+{% endblock %}

@@ -14,6 +14,8 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.formatters import HtmlFormatter
 
+from pydal import DAL, Field
+
 from .mkpass import salthash, SALT
 
 import badass
@@ -37,11 +39,57 @@ REPORT.mkdir(exist_ok=True, parents=True)
 ERROR = pathlib.Path("errors")
 ERROR.mkdir(exist_ok=True, parents=True)
 
+BADASSTPL = BADASS / "www" / "templates"
 TEMPLATES = pathlib.Path("templates")
-if not all ((TEMPLATES / tpl).exists() for tpl in
-            ("index.html", "result.html", "style.css", "teacher.html", "wait.html")) :
-    TEMPLATES = str(pathlib.Path(__file__).parent / "templates")
-TEMPLATES.mkdir(exist_ok=True, parents=True)
+if not all((TEMPLATES / tpl.name).exists() for tpl in
+           itertools.chain(BADASSTPL.glob("*.html"), BADASSTPL.glob("*.css"))) :
+    TEMPLATES = BADASSTPL
+
+##
+## database
+##
+
+groups = {}
+
+with open("data/groups.csv", encoding="utf-8") as infile :
+    db = csv.DictReader(infile)
+    key, val = db.fieldnames
+    for item in db :
+        groups[key] = item[val]
+
+regpass = open("data/regpass.txt", encoding="utf-8").read().strip()
+
+class BadassDB (object) :
+    def __init__ (self, path) :
+        self.path = path = pathlib.Path(path)
+        self.db = DAL(f"sqlite://{path.name}", folder=str(path.parent))
+        self.db.define_table("users",
+                             Field("firstname", "string"),
+                             Field("lastname", "string"),
+                             Field("email", "string"),
+                             Field("password", "string"),
+                             Field("salt", "string"),
+                             Field("group", "string"),
+                             Field("studentid", "string"))
+        self.db.define_table("submissions",
+                             Field("user", "reference users"),
+                             Field("date", "datetime"),
+                             Field("exercise", "string"),
+                             Field("path", "string"))
+        self.db.define_table("results",
+                             Field("user", "reference users"),
+                             Field("date", "datetime"),
+                             Field("submission", "reference submissions"),
+                             Field("savedto", "string"),
+                             Field("permalink", "string"))
+        self.db.define_table("reports",
+                             Field("user", "reference users"),
+                             Field("date", "datetime"),
+                             Field("groups", "list:string"),
+                             Field("exercises", "list:string"),
+                             Field("path", "string"))
+
+db = BadassDB("data/badass.db")
 
 ##
 ## users management
