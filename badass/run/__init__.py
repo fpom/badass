@@ -85,7 +85,7 @@ class Repository (object) :
         if path.exists() :
             fd, path = mkstemp(prefix=path.stem + "-", suffix=path.suffix, dir=base)
             os.close(fd)
-            path = Path(path)
+            path = self.base / Path(path).relative_to(self.base.resolve())
             print(f"* path = {path}")
         else :
             path.touch()
