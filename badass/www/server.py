@@ -335,7 +335,7 @@ def result () :
         define.extend(["-d", f"{key}={val}"])
     out = check_output(["python3", "-m", "badass", "run", "--debug", script, project] + define,
                        env=ENV)
-    if out.strip() :
+    if out and out.strip() :
         raise Exception(out)
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
