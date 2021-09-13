@@ -1,5 +1,5 @@
 install:
-	python3 setup.py install --force
+	pip install . --no-deps --force --use-feature=in-tree-build
 	make clean
 
 pip: clean
