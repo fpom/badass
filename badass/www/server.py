@@ -10,20 +10,22 @@ from flask import Flask, abort, current_app, request, url_for, render_template, 
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 
+from flask_login import LoginManager
+from flask_mail import Mail, Message
+
 from pygments import highlight
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.formatters import HtmlFormatter
 
-from pydal import DAL, Field
-
-from .mkpass import salthash, SALT
+from .db import BadassDB, User, Role
+from .mkpass import pwgen
 
 import badass
 
 random.seed()
 
 ##
-##
+## config
 ##
 
 BADASS = str(pathlib.Path(badass.__file__).parent.parent).rstrip("/") + "/"
@@ -39,114 +41,16 @@ REPORT.mkdir(exist_ok=True, parents=True)
 ERROR = pathlib.Path("errors")
 ERROR.mkdir(exist_ok=True, parents=True)
 
-BADASSTPL = BADASS / "www" / "templates"
+BADASSTPL = pathlib.Path(BADASS) / "www" / "templates"
 TEMPLATES = pathlib.Path("templates")
 if not all((TEMPLATES / tpl.name).exists() for tpl in
            itertools.chain(BADASSTPL.glob("*.html"), BADASSTPL.glob("*.css"))) :
     TEMPLATES = BADASSTPL
 
-##
-## database
-##
-
-groups = {}
-
-with open("data/groups.csv", encoding="utf-8") as infile :
-    db = csv.DictReader(infile)
-    key, val = db.fieldnames
-    for item in db :
-        groups[key] = item[val]
-
-regpass = open("data/regpass.txt", encoding="utf-8").read().strip()
-
-class BadassDB (object) :
-    def __init__ (self, path) :
-        self.path = path = pathlib.Path(path)
-        self.db = DAL(f"sqlite://{path.name}", folder=str(path.parent))
-        self.db.define_table("users",
-                             Field("firstname", "string"),
-                             Field("lastname", "string"),
-                             Field("email", "string"),
-                             Field("password", "string"),
-                             Field("salt", "string"),
-                             Field("group", "string"),
-                             Field("studentid", "string"))
-        self.db.define_table("submissions",
-                             Field("user", "reference users"),
-                             Field("date", "datetime"),
-                             Field("exercise", "string"),
-                             Field("path", "string"))
-        self.db.define_table("results",
-                             Field("user", "reference users"),
-                             Field("date", "datetime"),
-                             Field("submission", "reference submissions"),
-                             Field("savedto", "string"),
-                             Field("permalink", "string"))
-        self.db.define_table("reports",
-                             Field("user", "reference users"),
-                             Field("date", "datetime"),
-                             Field("groups", "list:string"),
-                             Field("exercises", "list:string"),
-                             Field("path", "string"))
-
-db = BadassDB("data/badass.db")
-
-##
-## users management
-##
-
-class UserDB (object) :
-    def __init__ (self, path) :
-        self.path = pathlib.Path(path)
-        self.loaded = 0
-        self.reload()
-    @property
-    def groups (self) :
-        self.reload()
-        return self._groups
-    def reload (self) :
-        if self.loaded > self.path.stat().st_mtime :
-            return
-        groups = {}
-        bykey = {}
-        with open(self.path, encoding="utf-8") as infile :
-            self.fields = infile.readline().strip().split(",")
-            self.key = self.fields[0]
-            user = collections.namedtuple("user", self.fields)
-            db = csv.DictReader(infile, self.fields)
-            for item in db :
-                item["group"] = item["group"].replace(" ", "_")
-                row = user(**item)
-                key = getattr(row, self.key)
-                if row.group not in groups :
-                    groups[row.group] = []
-                groups[row.group].append(key)
-                bykey[key] = row
-        self.loaded = time.time()
-        self._groups = groups
-        self._bykey = bykey
-    def __getitem__ (self, key) :
-        self.reload()
-        return self._bykey[key]
-    def auth (self, key, password) :
-        self.reload()
-        row = self[key]
-        if "salt" not in self.fields :
-            attempt, _ = password, salthash(SALT, password)
-        else :
-            _, attempt = password, salthash(row.salt, password)
-        return secrets.compare_digest(attempt, row.password)
-
-students = UserDB("data/students.csv")
-teachers = UserDB("data/teachers.csv")
-
-##
-## waiting animations
-##
-
 ANIMS = [json.load(path.open(encoding="utf-8"))
          for path in pathlib.Path().glob("anim/*.json")] or [None]
 
+db = User.db = BadassDB("data")
 ##
 ## flask app starts here
 ##
@@ -154,69 +58,63 @@ ANIMS = [json.load(path.open(encoding="utf-8"))
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
 
+for key, val in db.cfg.items("MAIL") :
+    app.config[key] = val
+
+mail = Mail(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+@login_manager.user_loader
+def load_user (user_id) :
+    return User.load(user_id)
+
 ##
-## errors handling
+## authentication
 ##
 
-def errorpath () :
-    for size in itertools.count(start=2) :
-        for i in range(10) :
-            path = ERROR / secrets.token_urlsafe(size)
-            if not path.exists() :
-                return path
+def enforce_auth (func) :
+    @wraps(func)
+    def wrapper (*l, **k) :
+        if not current_user.is_authenticated :
+            return redirect(url_for("login"))
+        return func(*l, **k)
+    return wrapper
 
-@app.errorhandler(Exception)
-def handle_exception (err) :
-    if not isinstance(err, HTTPException) :
-        path = errorpath()
-        name = path.name
-        with path.open("w", encoding="utf-8") as out :
-            tb = traceback.TracebackException.from_exception(err, capture_locals=True)
-            out.write("<h5>Traceback</h5>\n")
-            text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
-            out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
-            if session :
-                out.write("<h5>Session</h5><div>")
-                for key, val in session.items() :
-                    out.write(f"<b><code>{key}</code></b><pre>\n")
-                    try :
-                        text = pformat(val)
-                    except :
-                        text = repr(val)
-                    out.write(highlight(text, PythonLexer(), HtmlFormatter()))
-                out.write("</div>")
-        err = InternalServerError(f"The server encountered an internal error"
-                                  f" and was unable to complete your request."
-                                  f" The error has been recorded with identifier"
-                                  f" {name!r} and will be investigated.")
-    return render_template("httperror.html", err=err), err.code
+def require_login (func) :
+    @wraps(func)
+    def wrapper (*l, **k) :
+        if not current_user.is_authenticated :
+            abort(401)
+        return func(*l, **k)
+    return wrapper
 
-@app.route("/error", methods=["GET", "POST"])
-def error () :
+def require_role (role) :
+    def decorator (func) :
+        @wraps(func)
+        def wrapper (*l, **k) :
+            if not (current_user.is_authenticated and current_user.has_role(role)) :
+                abort(401)
+            return func(*l, **k)
+        return wrapper
+    return decorator
+
+@app.route("/login", methods=["GET", "POST"])
+def login () :
     if request.method == "GET" :
-        return render_template("error.html", report=None, form={})
+        return render_template("login.html")
     form = dict(request.form)
-    try :
-        who = teachers[form["login"]]
-        if not teachers.auth(who.login, form["password"]) :
-            raise Exception()
-        if who.group != "admin" :
-            raise Exception()
-    except :
-        flash("access denied", "error")
-        return render_template("error.html", report=None, form=form)
-    try :
-        if not form["error"] :
-            raise Exception()
-        path = ERROR / form["error"]
-        report = path.read_text(encoding="utf-8")
-    except :
-        flash(f"invalid error identifier {form.pop('error','')!r}", "error")
-        return render_template("error.html", report=None, form=form)
-    if form.get("delete", None) == "on" :
-        path.unlink()
-        form.pop("error", None)
-    return render_template("error.html", report=Markup(report), form=form)
+    user = User.from_auth(form.get("email", "").strip().lower(),
+                          form.get("password", ""))
+    login_user(user)
+    return redirect(url_for("index"))
+
+@app.route("/logout")
+@enforce_auth
+def logout () :
+    logout_user()
+    return redirect(url_for("index"))
 
 ##
 ## asynchronous API for long running tasks
@@ -266,6 +164,7 @@ def async_api (wrapped_function) :
     return new_function
 
 @app.route("/status/<task_id>")
+@require_login
 def gettaskstatus (task_id) :
     global tasks
     task = tasks.get(task_id, None)
@@ -278,6 +177,7 @@ def gettaskstatus (task_id) :
         return jsonify({"wait" : True})
 
 @app.route("/result/<task_id>")
+@require_login
 def gettaskresult (task_id) :
     global tasks
     task = tasks.get(task_id, None)
@@ -315,23 +215,98 @@ def asset (kind, name) :
         abort(404)
 
 ##
-## students interface
+## user management
+##
+
+@app.route("/register", methods=["GET", "POST"])
+def register () :
+    if request.method == "GET" :
+        return render_template("register.html",
+                               groups=db.groups,
+                               code=bool(db.cfg.REGISTRATION.PASSWORD))
+    form = dict(request.form)
+    if (db.cfg.REGISTRATION.PASSWORD
+        and form.get("code", None) != db.cfg.REGISTRATION.PASSWORD) :
+        flash("invalid course code", "error")
+        abort(401)
+    errors = []
+    for field, desc in [("email", "e-mail"),
+                        ("firstname", "first name"),
+                        ("lastname", "last name"),
+                        ("studentid", "student number")] :
+        if not form.get(field, None) :
+            errors.append(f"{desc} is required")
+    if form.get("group", None) not in db.groups :
+        errors.append("invalid group")
+    if errors :
+        for msg in errors :
+            flash(msg, "error")
+        return render_template("register.html",
+                               groups=db.groups,
+                               code=bool(db.cfg.REGISTRATION.PASSWORD))
+    password = pwgen()
+    if db.add_user(email=form["email"],
+                   firstname=form["firstname"],
+                   lastname=form["lastname"],
+                   password=password,
+                   group=form["group"],
+                   roles=[],
+                   studentid=int(form["studentid"])) :
+        flash(f"registration succeeded, your password has been"
+              f" emailed to {form['email']}", "info")
+        mail.send(Message(f"Your password is {password}\n",
+                          subject="Welcome to badass",
+                          recipients=[form["email"]]))
+        return redirect(url_for("index"))
+    else :
+        flash("registration failed, this e-mail may be used already", "error")
+        return redirect(url_for("register"))
+
+@app.route("/reset")
+def reset () :
+    if request.method == "GET" :
+        return render_template("reset.html", code=bool(db.cfg.REGISTRATION.PASSWORD))
+    form = dict(request.form)
+    if (db.cfg.REGISTRATION.PASSWORD
+        and form.get("code") != db.cfg.REGISTRATION.PASSWORD) :
+        flash("invalid course code", "error")
+        abort(401)
+    if not form.get("email", None) :
+        flash("e-mail is required", "error")
+        return render_template("reset.html", code=bool(db.cfg.REGISTRATION.PASSWORD))
+    password = pwgen()
+    if db.update_user(form["email"], password=password) :
+        flash(f"your password has been emailed to {form['email']}", "info")
+        mail.send(Message(f"Your new password is {password}\n",
+                          subject="Welcome back to badass",
+                          recipients=[form["email"]]))
+        return redirect(url_for("index"))
+    else :
+        flash("password reset failed, this e-mail may be invalid", "error")
+        return redirect(url_for("reset"))
+
+@app.route("/users")
+#@require_role(Role.admin)
+def users () :
+    return render_template("users.html", users=User.iter_users())
+
+@app.route("/user/<user_id>")
+@require_login
+def user (user_id) :
+    pass
+
+##
+## submission interface
 ##
 
 @app.route("/", methods=["GET", "POST"])
+@enforce_auth
 def index () :
     if request.method == "GET" :
-        # show form if not provided
         return render_template("index.html")
-    # check form content
+    # check form
     errors = []
     form = dict(request.form)
-    try :
-        who = students[form["student"]]
-        if not students.auth(who.login, form.pop("password")) :
-            raise Exception()
-    except :
-        errors.append("invalid login or password")
     if form.pop("consent", None) != "on" :
         errors.append("you must certify your identity")
     if not request.files.getlist("source") :
@@ -361,6 +336,7 @@ def index () :
         name = secure_filename(src.filename)
         path = str(base / name)
         src.save(path)
+    # TODO: save submission to DB
     # go process the submission
     return redirect(url_for("result"))
 
@@ -374,6 +350,7 @@ def check_output (*l, **k) :
 
 @app.route("/result")
 @async_api
+@require_login
 def result () :
     form = session["form"]
     script = pathlib.Path(form.pop("path"))
@@ -402,9 +379,11 @@ def result () :
     permalink_path = project / "permalink"
     with permalink_path.open("w", encoding="utf-8") as out :
         out.write(permalink)
+    # TODO: save result to DB
     return redirect(permalink)
 
 @app.route("/report/<name>")
+@enforce_auth
 def report (name) :
     path = REPORT / name
     if path.exists() :
@@ -417,18 +396,12 @@ def report (name) :
 ##
 
 @app.route("/teacher", methods=["GET", "POST"])
+@enforce_auth
+@require_role(Role.teacher)
 def teacher () :
+    # TODO : add list of previous reports
     if request.method == "GET" :
         return render_template("teacher.html")
-    # check form content
-    form = dict(request.form)
-    try :
-        who = teachers[form["login"]]
-        if not teachers.auth(who.login, form.pop("password")) :
-            raise Exception()
-    except :
-        flash("invalid login or password", "error")
-        return redirect(url_for("teacher"))
     # process validated query
     form["group"] = request.form.getlist("group")
     form["exercise"] = request.form.getlist("exercise")
@@ -437,6 +410,7 @@ def teacher () :
 
 @app.route("/marks")
 @async_api
+@require_login
 def marks () :
     form = session["form"]
     base = UPLOAD.joinpath(form["Course"])
@@ -450,4 +424,63 @@ def marks () :
     for grp in list(form["group"]) :
         argv.extend(students.groups[grp.replace(" ", "_")])
     check_output(argv, env=ENV)
+    # TODO : redirect to /teacher and flash link to new report
     return send_file(path.open("rb"), as_attachment=True, attachment_filename=path.name)
+
+##
+## errors handling
+##
+
+def errorpath () :
+    for size in itertools.count(start=2) :
+        for i in range(10) :
+            path = ERROR / secrets.token_urlsafe(size)
+            if not path.exists() :
+                return path
+
+# @app.errorhandler(Exception)
+# def handle_exception (err) :
+#     if not isinstance(err, HTTPException) :
+#         path = errorpath()
+#         name = path.name
+#         with path.open("w", encoding="utf-8") as out :
+#             tb = traceback.TracebackException.from_exception(err, capture_locals=True)
+#             out.write("<h5>Traceback</h5>\n")
+#             text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
+#             out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
+#             if session :
+#                 out.write("<h5>Session</h5><div>")
+#                 for key, val in session.items() :
+#                     out.write(f"<b><code>{key}</code></b><pre>\n")
+#                     try :
+#                         text = pformat(val)
+#                     except :
+#                         text = repr(val)
+#                     out.write(highlight(text, PythonLexer(), HtmlFormatter()))
+#                 out.write("</div>")
+#         err = InternalServerError(f"The server encountered an internal error"
+#                                   f" and was unable to complete your request."
+#                                   f" The error has been recorded with identifier"
+#                                   f" {name!r} and will be investigated.")
+#     return render_template("httperror.html", err=err), err.code
+
+@app.route("/errors", methods=["GET", "POST"])
+@enforce_auth
+@require_role(Role.dev)
+def error () :
+    if request.method == "GET" :
+        return render_template("error.html", report=None, form={})
+    form = dict(request.form)
+    try :
+        if not form["error"] :
+            raise Exception()
+        path = ERROR / form["error"]
+        report = path.read_text(encoding="utf-8")
+    except :
+        flash(f"invalid error identifier {form.pop('error','')!r}", "error")
+        return render_template("error.html", report=None, form=form)
+    if form.get("delete", None) == "on" :
+        path.unlink()
+        form.pop("error", None)
+    return render_template("error.html", report=Markup(report), form=form)
+

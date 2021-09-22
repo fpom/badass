@@ -5,7 +5,7 @@ from secrets import token_bytes
 from .. import encoding
 
 def walk (path, root=None,
-          collect={"yaml", "csv", "bad", "json",
+          collect={"yaml", "csv", "bad", "json", "cfg",
                    "svg", "ico", "gif", "png",
                    "mp4",
                    "html", "css", "js", "map"}) :
@@ -24,7 +24,7 @@ serve: all
 	badass www -s --no-pin
 
 static/%.js: forms/%.yaml
-	badass www -f $< -o $@
+	badass www --form $< --output $@
 """
 
 def copy_static (target_dir, clobber=False) :

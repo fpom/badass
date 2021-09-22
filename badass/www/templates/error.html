@@ -1,15 +1,13 @@
 {% extends "basetpl.html" %}
-{% block title %}Error tracker{% endblock %}
+{% block titlebar %}
+<h1>{% block title %}Error tracker{% endblock %}</h1>
+{% endblock %}
 {% block content %}
         {% if report %}
         {{ report }}
         <h5>Track another error</h5>
         {% endif %}
         <form id="form" method=POST action="{{ url_for('error') }}" data-ajax="false">
-          <label for="login">Login</label>
-          <input type="text" name="login" value="{{ form.get('login', '') }}">
-          <label for="password">Password</label>
-          <input type="password" name="password" value="{{ form.get('password', '') }}">
           <label for="error">Error identifier</label>
           <input type="text" name="error" value="{{ form.get('error', '') }}">
           <label for="delete" class="danger">Delete report</label>

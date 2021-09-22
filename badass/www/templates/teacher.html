@@ -1,5 +1,7 @@
 {% extends "basetpl.html" %}
-{% block title %}Teacher interface{% endblock %}
+{% block titlebar %}
+<h1>{% block title %}Teacher interface{% endblock %}</h1>
+{% endblock %}
 {% block head %}
     <script src="{{ url_for('static', filename='teacher.js') }}"></script>
 {% endblock %}

@@ -1,5 +1,7 @@
 {% extends "basetpl.html" %}
-{% block title %}{{ err.code }} - {{ err.name }}{% endblock %}
+{% block titlebar %}
+<h1>{% block title %}{{ err.code }} - {{ err.name }}{% endblock %}</h1>
+{% endblock %}
 {% block content %}
         <div class="alert alert-http">
           {{ err.description }}

@@ -21,7 +21,7 @@ def walk (path=None) :
             if child.name != "__pycache__" :
                 yield from walk(child)
         elif (child.is_file()
-              and child.suffix in (".bad", ".yaml", ".json",
+              and child.suffix in (".bad", ".yaml", ".json", ".cfg",
                                    ".svg", ".ico", ".gif", ".png", ".mp4",
                                    ".js", ".css", ".html", ".map", ".csv")) :
             yield str(child.relative_to(root))
@@ -52,6 +52,8 @@ setup(name="not-so-badass",
       packages=find_packages(where="."),
       python_requires=">=3.9",
       install_requires=["flask",
+                        "flask_login",
+                        "Flask-Mail",
                         "PyYAML",
                         "Headers-as-Dependencies",
                         "numpy",

@@ -1,5 +1,7 @@
 {% extends "basetpl.html" %}
-{% block title %}Submit your work{% endblock %}
+{% block titlebar %}
+<h1>{% block title %}Submit your work{% endblock %}</h1>
+{% endblock %}
 {% block head %}
     <script src="{{ url_for('static', filename='index.js') }}"></script>
 {% endblock %}

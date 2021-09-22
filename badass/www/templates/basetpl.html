@@ -23,14 +23,16 @@
           {% if current_user.has_role("admin") %}
           <li><a href="/users">users</a></li>
           {% endif %}
-          {% if current_user.has_role("developer") %}
+          {% if current_user.has_role("dev") %}
           <li><a href="/erros">errors</a></li>
           {% endif %}
           <li><a href="/logout">logout</a></li>
         </div>
         {% endif %}
         {% endblock %}
-        <h1>{% block title %}{% endblock %}</h1>
+        {% block titlebar %}
+        <h1></h1>
+        {% endblock %}
       </div>
       <div data-role="main" class="ui-content">
         {% with messages = get_flashed_messages(with_categories=true) %}

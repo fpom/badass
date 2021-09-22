@@ -1,5 +1,7 @@
 {% extends "basetpl.html" %}
-{% block title %}Analysis result{% endblock %}
+{% block titlebar %}
+<h1>{% block title %}Analysis result{% endblock %}</h1>
+{% endblock %}
 {% block content %}
         {% for test in report %}
         <div data-role="collapsible" data-content-theme="false" data-collapsed-icon="carat-d" data-expanded-icon="carat-u" data-iconpos="right">

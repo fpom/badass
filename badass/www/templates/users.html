@@ -1,0 +1,35 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}Badass users{% endblock %}</h1>
+{% endblock %}
+{% block head %}
+    <script src="{{ url_for('static', filename='list.min.js') }}"></script>
+{% endblock %}
+{% block content %}
+    <table class="users">
+      <thead>
+        <tr>
+          <th><input class="search-firstname" placeholder="first name"></th>
+          <th><input class="search-lastname" placeholder="last name"></th>
+          <th><input class="search-email" placeholder="e-mail"></th>
+          <th><input class="search-group" placeholder="group"></th>
+          <th><input class="search-roles" placeholder="roles"></th>
+          <th><input class="search-studentid" placeholder="student number"></th>
+          <th><input class="search-activated" placeholder="activated"></th>
+        </tr>
+      </thead>
+      <tbody class="list">
+        {% for user in users %}
+        <tr>
+          <td class="firstname"><a href="{{ url_for('user', user_id=user.id) }}">{{ user.firstname }}</a></td>
+          <td class="lastname"><a href="{{ url_for('user', user_id=user.id) }}">{{ user.lastname }}</a></td>
+          <td class="email"><a href="mailto:{{ user.email }}">{{ user.email }}</a></td>
+          <td class="group">{{ user.group }}</td>
+          <td class="roles">{{ user.roles|join(", ") }}</td>
+          <td class="studentid">{{ user.studentid }}</td>
+          <td class="activated">{{ "yes" if user.activated else "no" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+{% endblock %}

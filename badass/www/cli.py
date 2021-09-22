@@ -1,13 +1,18 @@
 import argparse, sys, pathlib, subprocess, os
 
+class UserAction (argparse.Action) :
+    def __call__ (self, parser, namespace, values, option_string) :
+        print("***", self.dest, "=", values or True)
+        setattr(namespace, self.dest, values or True)
+
 def add_arguments (sub) :
-    excl = sub.add_mutually_exclusive_group(required=True)
+    excl = sub.add_mutually_exclusive_group()
     #
     excl.add_argument("-f", "--form", metavar="YAML",
                        type=argparse.FileType(mode="r", encoding="utf-8"),
                        help="generate form from YAML")
     group = sub.add_argument_group("form generation options")
-    group.add_argument("-o", "--output", metavar="PATH",
+    group.add_argument("--output", metavar="PATH",
                        type=argparse.FileType(mode="w", encoding="utf-8"),
                        default=sys.stdout,
                        help="output to PATH (default: stdout)")
@@ -15,23 +20,34 @@ def add_arguments (sub) :
     excl.add_argument("-i", "--init", default=None, const=".", nargs="?", metavar="PATH",
                       help="copy static files to directory PATH (default: .)")
     group = sub.add_argument_group("static files init options")
-    group.add_argument("-c", "--clobber", default=False, action="store_true",
+    group.add_argument("--clobber", default=False, action="store_true",
                        help="replace existing files")
     #
-    excl.add_argument("-p", "--passwd", type=str, metavar="CSV",
-                      help="password CSV database")
-    group = sub.add_argument_group("passwords management options")
-    group.add_argument("-u", "--user", default=[], action="append", type=str,
-                       help="(re)generate password for selected user (default: all)")
-    group.add_argument("-a", "--add", default=None, type=str, metavar="PATH",
-                       help="add users from CSV file PATH")
-    group.add_argument("-r", "--read", default=False, action="store_true",
-                       help="read passwords interactively instead of generating them")
-    group.add_argument("-d", "--default", default=None, action="store", type=str,
-                       help="password to be used (dangerous)")
-    group.add_argument("-l", "--log", default=sys.stdout,
-                       type=argparse.FileType(mode="w", encoding="utf-8"),
-                       help="log changed password to LOG (default: stdout)")
+    excl.add_argument("-a", "--add-user", dest="dbpath", metavar="PATH", default=None,
+                      help="add a new user to database stored in PATH")
+    group = sub.add_argument_group("options to add user")
+    group.add_argument("--email", metavar="EMAIL",
+                       help="new user's email address")
+    group.add_argument("--first-name", dest="firstname", metavar="NAME", default=None,
+                       help="new user's first name")
+    group.add_argument("--last-name", dest="lastname", metavar="NAME", default=None,
+                       help="new user's last name (family name)")
+    group.add_argument("--group", metavar="GROUP", default=None,
+                       help="new user's group")
+    group.add_argument("--student-id", dest="studentid", metavar="NUM", default=None,
+                       help="new user's student number")
+    group.add_argument("--password", metavar="PASSWORD", default=None,
+                       help=("new user's password (WARNING: this will be visible"
+                             " system-wide in process' argv)"))
+    group.add_argument("--activated", default=None,
+                       action=argparse.BooleanOptionalAction,
+                       help="activate new user's account without requiring a login")
+    role_excl = sub.add_mutually_exclusive_group()
+    role_excl.add_argument("--role", dest="roles", metavar="ROLE",
+                           action="append",
+                           help="new user's role (reuse option to add several)")
+    role_excl.add_argument("--no-roles", dest="roles", action="store_const", const=[],
+                           help="set new user with no roles")
     #
     excl.add_argument("-s", "--serve", default=False, action="store_true",
                        help="start Flask server")
@@ -53,10 +69,23 @@ def main (args) :
     elif args.init is not None :
         from . import copy_static
         copy_static(pathlib.Path(args.init), args.clobber)
-    elif args.passwd is not None :
-        from .mkpass import mkpass
-        mkpass(args.passwd, args.user or None, args.add,
-               args.read, args.default, args.log)
+    elif args.dbpath is not None :
+        from .db import BadassDB
+        from getpass import getpass
+        db = BadassDB(args.dbpath)
+        if not db.add_user(email=args.email or input("email: "),
+                           firstname=args.firstname or input("first name: "),
+                           lastname=args.lastname or input("last name: "),
+                           password=args.password or getpass("password: "),
+                           group=args.group or input("group: " ),
+                           roles=list(args.roles if args.roles is not None
+                                      else input("role [role]...: " ).split()),
+                           studentid=args.studentid or input("student number: "),
+                           activated=(args.activated if arg.activated is not None else
+                                      input("activate [y/N]: ")
+                                      .lower().startswith("y"))) :
+            print("failed, this email may be already in use")
+            sys.exit(1)
     elif args.serve :
         env = dict(os.environ)
         env["FLASK_APP"] = "badass.www.server"
@@ -68,4 +97,4 @@ def main (args) :
             argv.append("--no-reload")
         subprocess.run(argv, env=env)
     else :
-        raise RuntimeError("unreachable code has been reached")
+        raise RuntimeError("unreachable code has been reached (LOL)")
