@@ -70,22 +70,8 @@ def main (args) :
         from . import copy_static
         copy_static(pathlib.Path(args.init), args.clobber)
     elif args.dbpath is not None :
-        from .db import BadassDB
-        from getpass import getpass
-        db = BadassDB(args.dbpath)
-        if not db.add_user(email=args.email or input("email: "),
-                           firstname=args.firstname or input("first name: "),
-                           lastname=args.lastname or input("last name: "),
-                           password=args.password or getpass("password: "),
-                           group=args.group or input("group: " ),
-                           roles=list(args.roles if args.roles is not None
-                                      else input("role [role]...: " ).split()),
-                           studentid=args.studentid or input("student number: "),
-                           activated=(args.activated if arg.activated is not None else
-                                      input("activate [y/N]: ")
-                                      .lower().startswith("y"))) :
-            print("failed, this email may be already in use")
-            sys.exit(1)
+        from . import add_user
+        add_user(args)
     elif args.serve :
         env = dict(os.environ)
         env["FLASK_APP"] = "badass.www.server"

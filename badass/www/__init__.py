@@ -68,3 +68,44 @@ def copy_static (target_dir, clobber=False) :
             print("clobbering:", makefile)
         with makefile.open("w") as out :
             out.write(makefile_src)
+
+def add_user (args) :
+    from getpass import getpass
+    from .db import connect
+    db, cfg, User, Role = connect(args.dbpath)
+    fields = {"email" : args.email or input("email: "),
+              "firstname" : args.firstname or input("first name: "),
+              "lastname" : args.lastname or input("last name: "),
+              "studentid" : args.studentid or input("student number: ")}
+    while True :
+        group = fields["group"] = (args.group or input("group: " )).upper() or None
+        if group is None or group in cfg.GROUPS :
+            break
+        args.groups = None
+        print(f"invalid group: {group}")
+        print("known groups are: ")
+        for key, val in cfg.GROUPS.items() :
+            print(f" - {key}: {val}")
+    while True :
+        roles = fields["roles"] = list(args.roles if args.roles is not None
+                                       else input("role [role]...: " ).split())
+        for role in roles :
+            try :
+                Role[role]
+            except :
+                print(f"invalid role: {role}")
+                print("known roles are: ", ", ".join(str(r.value) for r in Role))
+                break
+        else :
+            break
+        args.roles = None
+    while True :
+        password = fields["password"] = args.password or getpass("password: ")
+        if args.password is not None or password == getpass("retype password: ") :
+            break
+        print("passwords do not match, please retry")
+    fields["activated"] = (args.activated if args.activated is not None
+                           else input("activate [y/N]: ").lower().startswith("y"))
+    if not User.add(**fields) :
+        print("failed, this email may be already in use")
+        sys.exit(1)

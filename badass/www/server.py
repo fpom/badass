@@ -17,7 +17,7 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.formatters import HtmlFormatter
 
-from .db import BadassDB, User, Role
+from .db import connect
 from .mkpass import pwgen
 
 import badass
@@ -50,7 +50,8 @@ if not all((TEMPLATES / tpl.name).exists() for tpl in
 ANIMS = [json.load(path.open(encoding="utf-8"))
          for path in pathlib.Path().glob("anim/*.json")] or [None]
 
-db = User.db = BadassDB("data")
+db, cfg, User, Role = connect("data")
+
 ##
 ## flask app starts here
 ##
@@ -58,7 +59,7 @@ db = User.db = BadassDB("data")
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
 
-for key, val in db.cfg.items("MAIL") :
+for key, val in cfg.items("MAIL") :
     app.config[key] = val
 
 mail = Mail(app)
@@ -222,11 +223,11 @@ def asset (kind, name) :
 def register () :
     if request.method == "GET" :
         return render_template("register.html",
-                               groups=db.groups,
-                               code=bool(db.cfg.REGISTRATION.PASSWORD))
+                               groups=cfg.GROUPS,
+                               code=bool(cfg.REGISTRATION.PASSWORD))
     form = dict(request.form)
-    if (db.cfg.REGISTRATION.PASSWORD
-        and form.get("code", None) != db.cfg.REGISTRATION.PASSWORD) :
+    if (cfg.REGISTRATION.PASSWORD
+        and form.get("code", None) != cfg.REGISTRATION.PASSWORD) :
         flash("invalid course code", "error")
         abort(401)
     errors = []
@@ -236,22 +237,22 @@ def register () :
                         ("studentid", "student number")] :
         if not form.get(field, None) :
             errors.append(f"{desc} is required")
-    if form.get("group", None) not in db.groups :
+    if form.get("group", None) not in cfg.GROUPS :
         errors.append("invalid group")
     if errors :
         for msg in errors :
             flash(msg, "error")
         return render_template("register.html",
-                               groups=db.groups,
-                               code=bool(db.cfg.REGISTRATION.PASSWORD))
+                               groups=cfg.GROUPS,
+                               code=bool(cfg.REGISTRATION.PASSWORD))
     password = pwgen()
-    if db.add_user(email=form["email"],
-                   firstname=form["firstname"],
-                   lastname=form["lastname"],
-                   password=password,
-                   group=form["group"],
-                   roles=[],
-                   studentid=int(form["studentid"])) :
+    if User.add(email=form["email"],
+                firstname=form["firstname"],
+                lastname=form["lastname"],
+                password=password,
+                group=form["group"],
+                roles=[],
+                studentid=int(form["studentid"])) :
         flash(f"registration succeeded, your password has been"
               f" emailed to {form['email']}", "info")
         mail.send(Message(f"Your password is {password}\n",
@@ -265,24 +266,28 @@ def register () :
 @app.route("/reset")
 def reset () :
     if request.method == "GET" :
-        return render_template("reset.html", code=bool(db.cfg.REGISTRATION.PASSWORD))
+        return render_template("reset.html", code=bool(cfg.REGISTRATION.PASSWORD))
     form = dict(request.form)
-    if (db.cfg.REGISTRATION.PASSWORD
-        and form.get("code") != db.cfg.REGISTRATION.PASSWORD) :
+    if (cfg.REGISTRATION.PASSWORD
+        and form.get("code") != cfg.REGISTRATION.PASSWORD) :
         flash("invalid course code", "error")
         abort(401)
     if not form.get("email", None) :
         flash("e-mail is required", "error")
-        return render_template("reset.html", code=bool(db.cfg.REGISTRATION.PASSWORD))
+        return render_template("reset.html", code=bool(cfg.REGISTRATION.PASSWORD))
     password = pwgen()
-    if db.update_user(form["email"], password=password) :
+    user = User.from_email(form["email"])
+    if not user :
+        flash("password reset failed, this e-mail may be invalid", "error")
+        return redirect(url_for("reset"))
+    if user.update(password=password) :
         flash(f"your password has been emailed to {form['email']}", "info")
         mail.send(Message(f"Your new password is {password}\n",
                           subject="Welcome back to badass",
                           recipients=[form["email"]]))
         return redirect(url_for("index"))
     else :
-        flash("password reset failed, this e-mail may be invalid", "error")
+        flash("password reset failed", "error")
         return redirect(url_for("reset"))
 
 @app.route("/users")
