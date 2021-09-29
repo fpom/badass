@@ -3,14 +3,11 @@
 <h1>{% block title %}Reset your password{% endblock %}</h1>
 {% endblock %}
 {% block content %}
-        <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('register') }}" data-ajax="false">
+        <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('reset') }}" data-ajax="false">
           <label for="email">e-mail</label>
           <input type="email" name="email">
           <label for="code">course code</label>
           <input type="password" name="code">
           <input type="submit" value="Submit">
         </form>
-        <div>
-          <a href="{{ url_for('login') }}">Remembered your password?</a>
-        </div>
 {% endblock %}

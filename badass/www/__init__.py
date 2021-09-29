@@ -97,17 +97,17 @@ def add_user (args) :
     from getpass import getpass
     from .db import connect
     from .mkpass import strong
-    db, cfg, User, Role = connect(args.dbpath)
+    DB, CFG, USER, ROLES = connect(args.dbpath)
     fields = {"email" : _input("email", args.email),
               "firstname" : _input("first name", args.firstname),
               "lastname" : _input("last name", args.lastname),
               "studentid" : _input("student number", args.studentid),
               "group" : _input("group", args.group,
-                               check=lambda g : not g or g.upper() in cfg.GROUPS,
-                               valid=[f"{k}: {v}" for k, v in cfg.GROUPS.items()]),
+                               check=lambda g : not g or g.upper() in CFG.GROUPS,
+                               valid=[f"{k}: {v}" for k, v in CFG.GROUPS.items()]),
               "roles" : _input("roles", args.roles,
-                               check=lambda rrr : all(Role.has_value(r) for r in rrr),
-                               valid=[str(r.value) for r in Role],
+                               check=lambda rrr : all(r in ROLES for r in rrr),
+                               valid=list(ROLES),
                                convert=lambda v : v.strip().split()),
               "password" : _input("password", args.password,
                                   check=strong,
@@ -126,6 +126,6 @@ def add_user (args) :
                                    valid=["y[es]", "n[o]"],
                                    convert=lambda a : a.lower()[0] == "y"
                                    if a and a.lower()[0] in "yn" else a)}
-    if not User.add(**fields) :
+    if not USER.add(**fields) :
         print("failed, this email may be already in use")
         sys.exit(1)

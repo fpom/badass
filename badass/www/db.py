@@ -9,18 +9,18 @@ class Roles (object) :
         self._cfg = cfg
         self._val = set(values)
         for val in values :
-            setattr(self, val)
+            setattr(self, val, val)
     def __contains__ (self, value) :
         return value in self._val
     def __iter__ (self) :
-        yield from self._val
+        yield from sorted(self._val)
     def from_code (self, code) :
         for key, val in self._cfg.CODES.items() :
             if val == code :
-                return [r for r in key.split() if r in self]
+                return list(sorted(r for r in key.lower().split() if r in self))
         return []
     def from_form (self, form) :
-        return [r for r in self if form.get(f"role-{r}", False)]
+        return list(sorted(r for r in self if form.get(f"role-{r}", False)))
 
 class BaseUser (dict) :
     db = None
@@ -40,7 +40,7 @@ class BaseUser (dict) :
                   "firstname" : firstname,
                   "lastname" : lastname,
                   "group" : group,
-                  "roles" : roles,
+                  "roles" : list(sorted(roles)),
                   "studentid" : studentid,
                   "activated" : activated}
         salt = secrets.token_hex()
@@ -111,6 +111,8 @@ class BaseUser (dict) :
             return False
         if "password" in fields :
             fields["password"] = salthash(row["salt"], fields["password"])
+        if "roles" in fields :
+            fields["roles"] = list(sorted(fields["roles"]))
         row.update_record(**fields)
         self.db.commit()
         return True

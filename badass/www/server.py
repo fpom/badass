@@ -229,19 +229,20 @@ def register () :
     if request.method == "GET" :
         return render_template("register.html",
                                groups=CFG.GROUPS)
-    form = dict(request.form)
-    code = form.get("code", None)
+    code = request.form.get("code", None)
     if not any(code == c for c in CFG.CODES.values()) :
         flash("invalid course code", "error")
         abort(401)
+    roles = ROLES.from_code(code)
     errors = []
     for field, desc in [("email", "e-mail"),
                         ("firstname", "first name"),
-                        ("lastname", "last name"),
-                        ("studentid", "student number")] :
-        if not form.get(field, None) :
+                        ("lastname", "last name")] :
+        if not request.form.get(field, None) :
             errors.append(f"{desc} is required")
-    if form.get("group", None) not in CFG.GROUPS :
+    if not request.form.get("studentid", None) and not roles :
+        errors.append("student number is required")
+    if request.form.get("group", None) not in CFG.GROUPS and not roles :
         errors.append("invalid group")
     if errors :
         for msg in errors :
@@ -249,43 +250,43 @@ def register () :
         return render_template("register.html",
                                groups=CFG.GROUPS)
     password = pwgen()
-    if USER.add(email=form["email"],
-                firstname=form["firstname"],
-                lastname=form["lastname"],
+    if USER.add(email=request.form["email"],
+                firstname=request.form["firstname"],
+                lastname=request.form["lastname"],
                 password=password,
-                group=form["group"],
-                roles=ROLES.from_code(code),
-                studentid=int(form["studentid"])) :
-        flash(f"your password has been emailed to {form['email']}", "info")
+                group=request.form.get("group", ""),
+                roles=roles,
+                studentid=request.form.get("studentid", "")) :
+        flash(f"your password has been emailed to {request.form['email']}", "info")
         mail.send(Message(subject="Welcome to badass",
-                          recipients=[form["email"]],
+                          recipients=[request.form["email"]],
                           body=f"Your password is {password}\n"))
         return redirect(url_for("index"))
     else :
         flash("registration failed: this e-mail may be used already", "error")
         return redirect(url_for("register"))
 
-@app.route("/reset")
+@app.route("/reset", methods=["GET", "POST"])
 def reset () :
     if request.method == "GET" :
         return render_template("reset.html")
-    form = dict(request.form)
+    code = request.form.get("code", None)
     if not any(code == c for c in CFG.CODES.values()) :
         flash("invalid course code", "error")
         abort(401)
-    if not form.get("email", None) :
+    if not request.form.get("email", None) :
         flash("e-mail is required", "error")
         return render_template("reset.html")
     password = pwgen()
-    user = USER.from_email(form["email"])
+    user = USER.from_email(request.form["email"])
     if not user :
         flash("password reset failed, this e-mail may be invalid", "error")
         return redirect(url_for("reset"))
     if user.update(password=password) :
-        flash(f"your password has been emailed to {form['email']}", "info")
-        mail.send(Message(f"Your new password is {password}\n",
-                          subject="Welcome back to badass",
-                          recipients=[form["email"]]))
+        flash(f"your password has been emailed to {request.form['email']}", "info")
+        mail.send(Message(subject="Welcome back to badass",
+                          recipients=[request.form["email"]],
+                          body=f"Your new password is {password}\n"))
         return redirect(url_for("index"))
     else :
         flash("password reset failed", "error")
@@ -294,12 +295,14 @@ def reset () :
 @app.route("/users")
 @require_role(ROLES.admin)
 def users () :
-    return render_template("users.html", users=USER.iter_users())
+    return render_template("users.html",
+                           users=USER.iter_users(),
+                           groups=CFG.GROUPS)
 
 @app.route("/user/<user_id>", methods=["GET", "POST"])
 @require_login
 def user (user_id) :
-    if not (g.user.id == user_id or g.user.has_role("admin")) :
+    if not (str(g.user.id) == str(user_id) or g.user.has_role("admin")) :
         abort(401)
     if request.method == "GET" :
         return render_template("account.html",
@@ -426,7 +429,7 @@ def report (name) :
 
 @app.route("/teacher", methods=["GET", "POST"])
 @enforce_auth
-@require_role(Role.teacher)
+@require_role(ROLES.teacher)
 def teacher () :
     # TODO : add list of previous reports
     if request.method == "GET" :
@@ -497,7 +500,7 @@ if not app.config["DEBUG"] :
 
 @app.route("/errors", methods=["GET", "POST"])
 @enforce_auth
-@require_role(Role.dev)
+@require_role(ROLES.dev)
 def error () :
     if request.method == "GET" :
         return render_template("error.html", report=None, form={})

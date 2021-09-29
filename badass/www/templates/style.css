@@ -1,3 +1,36 @@
+.badass form {
+    width: 100%;
+}
+
+.badass form input {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+.badass form input[type=checkbox] {
+    display: block;
+    width: unset;
+    margin: 0px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    position: relative !important;
+}
+
+.badass form select {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+.badass form label {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .alert {
     display: block;
     margin: 0px;
@@ -59,9 +92,10 @@ ul .result-pass {
     color: #090;
 }
 
-li.lang {
+li.identity {
     margin-top: 5px;
     margin-bottom: 5px;
+    list-style: none;
 }
 
 li.lang-en {

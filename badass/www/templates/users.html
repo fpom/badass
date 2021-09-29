@@ -26,7 +26,11 @@
           <td class="firstname">{{ user.firstname }}</td>
           <td class="lastname">{{ user.lastname }}</td>
           <td class="email"><a href="mailto:{{ user.email }}">{{ user.email }}</a></td>
-          <td class="group">{{ user.group }}</td>
+          {% if user.group %}
+          <td class="group">{{ user.group }}: {{ groups[user.group] }}</td>
+          {% else %}
+          <td class="group"></td>
+          {% endif %}
           <td class="roles">{{ user.roles|join(", ") }}</td>
           <td class="studentid">{{ user.studentid }}</td>
           <td class="activated">{{ "yes" if user.activated else "no" }}</td>

@@ -16,7 +16,7 @@
           <select name="group">
             <option disabled="" selected="" value="">-- group --</option>
             {% for gname, gdesc in groups.items() %}
-            <option value="{{ gname }}">{{ gdesc }}</option>
+            <option value="{{ gname }}">{{ gname }}: {{ gdesc }}</option>
             {% endfor %}
           </select>
           <label for="code">course code</label>
