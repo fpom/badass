@@ -6,10 +6,8 @@
         <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('register') }}" data-ajax="false">
           <label for="email">e-mail</label>
           <input type="email" name="email">
-          {% if code %}
           <label for="code">course code</label>
           <input type="password" name="code">
-          {% endif %}
           <input type="submit" value="Submit">
         </form>
         <div>

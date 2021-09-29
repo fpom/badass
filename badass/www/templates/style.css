@@ -1,36 +1,3 @@
-form {
-    width: 100%;
-}
-
-form input {
-    display: block;
-    width: 100%;
-    margin-bottom: 10px;
-    box-sizing: border-box;
-}
-
-form input[type=checkbox] {
-    display: block;
-    width: unset;
-    margin: 0px;
-    margin-top: 5px;
-    margin-bottom: 10px;
-    position: relative !important;
-}
-
-form select {
-    display: block;
-    width: 100%;
-    margin-bottom: 10px;
-    box-sizing: border-box;
-}
-
-form label {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-}
-
 .alert {
     display: block;
     margin: 0px;

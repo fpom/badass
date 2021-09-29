@@ -19,10 +19,8 @@
             <option value="{{ gname }}">{{ gdesc }}</option>
             {% endfor %}
           </select>
-          {% if code %}
           <label for="code">course code</label>
           <input type="password" name="code">
-          {% endif %}
           <input type="submit" value="Submit">
         </form>
 {% endblock %}

@@ -2,28 +2,47 @@ import csv, secrets, configparser, ast
 
 from pydal import DAL, Field
 from sqlite3 import IntegrityError
-from flask_login import UserMixin
 from .mkpass import salthash
 
-from enum import Enum
+class Roles (object) :
+    def __init__ (self, cfg, values=["teacher", "admin", "dev"]) :
+        self._cfg = cfg
+        self._val = set(values)
+        for val in values :
+            setattr(self, val)
+    def __contains__ (self, value) :
+        return value in self._val
+    def __iter__ (self) :
+        yield from self._val
+    def from_code (self, code) :
+        for key, val in self._cfg.CODES.items() :
+            if val == code :
+                return [r for r in key.split() if r in self]
+        return []
+    def from_form (self, form) :
+        return [r for r in self if form.get(f"role-{r}", False)]
 
-class Role (Enum) :
-    teacher = "teacher"
-    admin = "admin"
-    dev = "dev"
-
-class BaseUser (UserMixin) :
+class BaseUser (dict) :
     db = None
+    _fields = {"id" : 0,
+               "email" : None,
+               "firstname" : None,
+               "lastname" : None,
+               "group" : None,
+               "roles" : [],
+               "studentid" : None,
+               "activated" : False,
+               "authenticated" : False}
     @classmethod
     def add (cls, email, firstname, lastname, password, group, roles, studentid,
              activated=False) :
         fields = {"email" : email,
                   "firstname" : firstname,
-                  "lastname"  : lastname,
+                  "lastname" : lastname,
                   "group" : group,
                   "roles" : roles,
                   "studentid" : studentid,
-                  "activated"  : activated}
+                  "activated" : activated}
         salt = secrets.token_hex()
         try :
             cls.db.users.insert(password=salthash(salt, password),
@@ -35,11 +54,7 @@ class BaseUser (UserMixin) :
         return cls(**fields)
     @classmethod
     def from_id (cls, user_id) :
-        try :
-            uid = int(user_id)
-        except :
-            return
-        fields = dict(cls.db(cls.db.users.id == uid).select().first())
+        fields = dict(cls.db(cls.db.users.id == user_id).select().first())
         if not fields :
             return
         return cls(**fields)
@@ -60,33 +75,28 @@ class BaseUser (UserMixin) :
         if not fields["activated"] :
             row.update_record(activated=True)
             cls.db.commit()
-        fields["authenticated"] = True
+        fields["activated"] = fields["authenticated"] = True
         return cls(**fields)
     @classmethod
     def iter_users (cls) :
-        for row in cls.db().select(cls.db.users.email,
+        for row in cls.db().select(cls.db.users.id,
+                                   cls.db.users.email,
                                    cls.db.users.firstname,
                                    cls.db.users.lastname,
                                    cls.db.users.group,
                                    cls.db.users.roles,
                                    cls.db.users.studentid,
                                    cls.db.users.activated) :
-            yield cls(**dict(fields))
+            yield cls(**dict(row))
     def __init__ (self, **fields) :
-        self.authenticated = False
-        for key, val in fields.items() :
-            setattr(self, key, val)
-    @property
-    def is_authenticated (self) :
-        return self.authenticated
-    @property
-    def is_active (self) :
-        return True
-    @property
-    def is_anonymous (self) :
-        return False
-    def get_id (self) :
-        return str(self.id)
+        super().__init__()
+        for key, default in self._fields.items() :
+            self[key] = fields.get(key, default)
+    def __getattr__ (self, name) :
+        if name in self._fields :
+            return self.get(name, self._fields.get(name))
+    def __str__ (self) :
+        return f"<User: id={self.id}>"
     def has_role (self, role) :
         return role in self.roles
     def delete (self) :
@@ -159,7 +169,7 @@ def connect (path) :
     # configuration
     config = configparser.ConfigParser()
     config.read(f"{path}/badass.cfg")
-    cfg = cfgtree("MAIL", "REGISTRATION", "GROUPS")
+    cfg = cfgtree("MAIL", "CODES", "GROUPS")
     for sec in config :
         for key, val in config[sec].items() :
             try :
@@ -169,4 +179,4 @@ def connect (path) :
     class User (BaseUser) :
         pass
     User.db = db
-    return db, cfg, User, Role
+    return db, cfg, User, Roles(cfg)

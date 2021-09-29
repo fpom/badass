@@ -32,17 +32,25 @@ def add_arguments (sub) :
                        help="new user's first name")
     group.add_argument("--last-name", dest="lastname", metavar="NAME", default=None,
                        help="new user's last name (family name)")
-    group.add_argument("--group", metavar="GROUP", default=None,
-                       help="new user's group")
-    group.add_argument("--student-id", dest="studentid", metavar="NUM", default=None,
-                       help="new user's student number")
+    group_excl = group.add_mutually_exclusive_group()
+    group_excl.add_argument("--group", metavar="GROUP", default=None,
+                            help="new user's group")
+    group_excl.add_argument("--no-group", dest="group", action="store_const", const="",
+                            help="set new user with no group")
+    studid_excl = group.add_mutually_exclusive_group()
+    studid_excl.add_argument("--student-id", dest="studentid", metavar="NUM",
+                             default=None,
+                             help="new user's student number")
+    studid_excl.add_argument("--no-student-id", dest="studentid",
+                             action="store_const", const="",
+                             help="set new user with no student number")
     group.add_argument("--password", metavar="PASSWORD", default=None,
                        help=("new user's password (WARNING: this will be visible"
                              " system-wide in process' argv)"))
     group.add_argument("--activated", default=None,
                        action=argparse.BooleanOptionalAction,
                        help="activate new user's account without requiring a login")
-    role_excl = sub.add_mutually_exclusive_group()
+    role_excl = group.add_mutually_exclusive_group()
     role_excl.add_argument("--role", dest="roles", metavar="ROLE",
                            action="append",
                            help="new user's role (reuse option to add several)")

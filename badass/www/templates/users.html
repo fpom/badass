@@ -4,11 +4,12 @@
 {% endblock %}
 {% block head %}
     <script src="{{ url_for('static', filename='list.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='users.js') }}"></script>
 {% endblock %}
 {% block content %}
-    <table class="users">
+    <table id="users">
       <thead>
-        <tr>
+          <th>#id</th>
           <th><input class="search-firstname" placeholder="first name"></th>
           <th><input class="search-lastname" placeholder="last name"></th>
           <th><input class="search-email" placeholder="e-mail"></th>
@@ -21,8 +22,9 @@
       <tbody class="list">
         {% for user in users %}
         <tr>
-          <td class="firstname"><a href="{{ url_for('user', user_id=user.id) }}">{{ user.firstname }}</a></td>
-          <td class="lastname"><a href="{{ url_for('user', user_id=user.id) }}">{{ user.lastname }}</a></td>
+          <td><a href="/user/{{ user.id }}">#{{ user.id }}</a></td>
+          <td class="firstname">{{ user.firstname }}</td>
+          <td class="lastname">{{ user.lastname }}</td>
           <td class="email"><a href="mailto:{{ user.email }}">{{ user.email }}</a></td>
           <td class="group">{{ user.group }}</td>
           <td class="roles">{{ user.roles|join(", ") }}</td>

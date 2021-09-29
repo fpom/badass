@@ -14,21 +14,27 @@
     <div data-role="page">
       <div data-role="header">
         {% block navbar %}
-        {% if current_user.is_authenticated %}
         <div data-role="navbar">
-          <li><a href="/user/{{ current_user.get_id() }}">account</a></li>
-          {% if current_user.has_role("teacher") %}
-          <li><a href="/teacher">teacher</a></li>
-          {% endif %}
-          {% if current_user.has_role("admin") %}
-          <li><a href="/users">users</a></li>
-          {% endif %}
-          {% if current_user.has_role("dev") %}
-          <li><a href="/erros">errors</a></li>
-          {% endif %}
-          <li><a href="/logout">logout</a></li>
+          <ul>
+            {% if g.user.authenticated %}
+            <li><a href="/user/{{ g.user.id }}">account</a></li>
+            {% if g.user.has_role("teacher") %}
+            <li><a href="/teacher">teacher</a></li>
+            {% endif %}
+            {% if g.user.has_role("admin") %}
+            <li><a href="/users">users</a></li>
+            {% endif %}
+            {% if g.user.has_role("dev") %}
+            <li><a href="/errors">errors</a></li>
+            {% endif %}
+            <li><a href="/logout">logout</a></li>
+            {% else %}
+            <li><a href="/login">login</a></li>
+            <li><a href="/reset">reset password</a></li>
+            <li><a href="/register">create account</a></li>
+            {% endif %}
+          </ul>
         </div>
-        {% endif %}
         {% endblock %}
         {% block titlebar %}
         <h1></h1>

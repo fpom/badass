@@ -6,11 +6,10 @@ from functools import wraps
 from pprint import pformat
 
 from flask import Flask, abort, current_app, request, url_for, render_template, \
-    flash, redirect, session, Markup, Response, send_file, jsonify
+    flash, redirect, session, Markup, Response, send_file, jsonify, g
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 
-from flask_login import LoginManager
 from flask_mail import Mail, Message
 
 from pygments import highlight
@@ -50,7 +49,7 @@ if not all((TEMPLATES / tpl.name).exists() for tpl in
 ANIMS = [json.load(path.open(encoding="utf-8"))
          for path in pathlib.Path().glob("anim/*.json")] or [None]
 
-db, cfg, User, Role = connect("data")
+DB, CFG, USER, ROLES = connect("data")
 
 ##
 ## flask app starts here
@@ -59,26 +58,26 @@ db, cfg, User, Role = connect("data")
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
 
-for key, val in cfg.items("MAIL") :
+for key, val in CFG.items("MAIL") :
     app.config[key] = val
 
 mail = Mail(app)
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-
-@login_manager.user_loader
-def load_user (user_id) :
-    return User.load(user_id)
 
 ##
 ## authentication
 ##
 
+@app.before_request
+def load_user():
+    if "user" in session:
+        g.user = USER(**session["user"])
+    else :
+        g.user = USER()
+
 def enforce_auth (func) :
     @wraps(func)
     def wrapper (*l, **k) :
-        if not current_user.is_authenticated :
+        if not g.user.authenticated :
             return redirect(url_for("login"))
         return func(*l, **k)
     return wrapper
@@ -86,7 +85,7 @@ def enforce_auth (func) :
 def require_login (func) :
     @wraps(func)
     def wrapper (*l, **k) :
-        if not current_user.is_authenticated :
+        if not g.user.authenticated :
             abort(401)
         return func(*l, **k)
     return wrapper
@@ -95,7 +94,7 @@ def require_role (role) :
     def decorator (func) :
         @wraps(func)
         def wrapper (*l, **k) :
-            if not (current_user.is_authenticated and current_user.has_role(role)) :
+            if not g.user.has_role(role) :
                 abort(401)
             return func(*l, **k)
         return wrapper
@@ -106,15 +105,21 @@ def login () :
     if request.method == "GET" :
         return render_template("login.html")
     form = dict(request.form)
-    user = User.from_auth(form.get("email", "").strip().lower(),
+    user = USER.from_auth(form.get("email", "").strip().lower(),
                           form.get("password", ""))
-    login_user(user)
+    if user is None :
+        flash("invalid email or password", "error")
+        return redirect(url_for("login"))
+    g.user = session["user"] = user
+    flash(f"logged in as {user.email}", "info")
     return redirect(url_for("index"))
 
 @app.route("/logout")
 @enforce_auth
 def logout () :
-    logout_user()
+    session.pop("user", None)
+    g.pop("user", None)
+    flash("logged out", "info")
     return redirect(url_for("index"))
 
 ##
@@ -223,11 +228,10 @@ def asset (kind, name) :
 def register () :
     if request.method == "GET" :
         return render_template("register.html",
-                               groups=cfg.GROUPS,
-                               code=bool(cfg.REGISTRATION.PASSWORD))
+                               groups=CFG.GROUPS)
     form = dict(request.form)
-    if (cfg.REGISTRATION.PASSWORD
-        and form.get("code", None) != cfg.REGISTRATION.PASSWORD) :
+    code = form.get("code", None)
+    if not any(code == c for c in CFG.CODES.values()) :
         flash("invalid course code", "error")
         abort(401)
     errors = []
@@ -237,46 +241,43 @@ def register () :
                         ("studentid", "student number")] :
         if not form.get(field, None) :
             errors.append(f"{desc} is required")
-    if form.get("group", None) not in cfg.GROUPS :
+    if form.get("group", None) not in CFG.GROUPS :
         errors.append("invalid group")
     if errors :
         for msg in errors :
             flash(msg, "error")
         return render_template("register.html",
-                               groups=cfg.GROUPS,
-                               code=bool(cfg.REGISTRATION.PASSWORD))
+                               groups=CFG.GROUPS)
     password = pwgen()
-    if User.add(email=form["email"],
+    if USER.add(email=form["email"],
                 firstname=form["firstname"],
                 lastname=form["lastname"],
                 password=password,
                 group=form["group"],
-                roles=[],
+                roles=ROLES.from_code(code),
                 studentid=int(form["studentid"])) :
-        flash(f"registration succeeded, your password has been"
-              f" emailed to {form['email']}", "info")
-        mail.send(Message(f"Your password is {password}\n",
-                          subject="Welcome to badass",
-                          recipients=[form["email"]]))
+        flash(f"your password has been emailed to {form['email']}", "info")
+        mail.send(Message(subject="Welcome to badass",
+                          recipients=[form["email"]],
+                          body=f"Your password is {password}\n"))
         return redirect(url_for("index"))
     else :
-        flash("registration failed, this e-mail may be used already", "error")
+        flash("registration failed: this e-mail may be used already", "error")
         return redirect(url_for("register"))
 
 @app.route("/reset")
 def reset () :
     if request.method == "GET" :
-        return render_template("reset.html", code=bool(cfg.REGISTRATION.PASSWORD))
+        return render_template("reset.html")
     form = dict(request.form)
-    if (cfg.REGISTRATION.PASSWORD
-        and form.get("code") != cfg.REGISTRATION.PASSWORD) :
+    if not any(code == c for c in CFG.CODES.values()) :
         flash("invalid course code", "error")
         abort(401)
     if not form.get("email", None) :
         flash("e-mail is required", "error")
-        return render_template("reset.html", code=bool(cfg.REGISTRATION.PASSWORD))
+        return render_template("reset.html")
     password = pwgen()
-    user = User.from_email(form["email"])
+    user = USER.from_email(form["email"])
     if not user :
         flash("password reset failed, this e-mail may be invalid", "error")
         return redirect(url_for("reset"))
@@ -291,14 +292,37 @@ def reset () :
         return redirect(url_for("reset"))
 
 @app.route("/users")
-#@require_role(Role.admin)
+@require_role(ROLES.admin)
 def users () :
-    return render_template("users.html", users=User.iter_users())
+    return render_template("users.html", users=USER.iter_users())
 
-@app.route("/user/<user_id>")
+@app.route("/user/<user_id>", methods=["GET", "POST"])
 @require_login
 def user (user_id) :
-    pass
+    if not (g.user.id == user_id or g.user.has_role("admin")) :
+        abort(401)
+    if request.method == "GET" :
+        return render_template("account.html",
+                               user=USER.from_id(user_id),
+                               groups=CFG.GROUPS,
+                               roles=list(ROLES))
+    user = USER.from_id(user_id)
+    update = {}
+    for key in ("email", "firstname", "lastname", "group", "studentid") :
+        new = request.form.get(key, None)
+        if new and new != user[key] :
+            update[key] = new
+    if g.user.has_role("admin") :
+        newroles = ROLES.from_form(request.form)
+        if set(newroles) != set(user.roles) :
+            update["roles"] = newroles
+    if not update :
+        flash("no account update required", "warning")
+    elif user.update(**update) :
+        flash("account updated", "info")
+    else :
+        flash("could not update account", "error")
+    return redirect(url_for("user", user_id=user_id))
 
 ##
 ## submission interface
@@ -443,31 +467,33 @@ def errorpath () :
             if not path.exists() :
                 return path
 
-# @app.errorhandler(Exception)
-# def handle_exception (err) :
-#     if not isinstance(err, HTTPException) :
-#         path = errorpath()
-#         name = path.name
-#         with path.open("w", encoding="utf-8") as out :
-#             tb = traceback.TracebackException.from_exception(err, capture_locals=True)
-#             out.write("<h5>Traceback</h5>\n")
-#             text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
-#             out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
-#             if session :
-#                 out.write("<h5>Session</h5><div>")
-#                 for key, val in session.items() :
-#                     out.write(f"<b><code>{key}</code></b><pre>\n")
-#                     try :
-#                         text = pformat(val)
-#                     except :
-#                         text = repr(val)
-#                     out.write(highlight(text, PythonLexer(), HtmlFormatter()))
-#                 out.write("</div>")
-#         err = InternalServerError(f"The server encountered an internal error"
-#                                   f" and was unable to complete your request."
-#                                   f" The error has been recorded with identifier"
-#                                   f" {name!r} and will be investigated.")
-#     return render_template("httperror.html", err=err), err.code
+if not app.config["DEBUG"] :
+    @app.errorhandler(Exception)
+    def handle_exception (err) :
+        if not isinstance(err, HTTPException) :
+            path = errorpath()
+            name = path.name
+            with path.open("w", encoding="utf-8") as out :
+                tb = traceback.TracebackException.from_exception(err,
+                                                                 capture_locals=True)
+                out.write("<h5>Traceback</h5>\n")
+                text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
+                out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
+                if session :
+                    out.write("<h5>Session</h5><div>")
+                    for key, val in session.items() :
+                        out.write(f"<b><code>{key}</code></b><pre>\n")
+                        try :
+                            text = pformat(val)
+                        except :
+                            text = repr(val)
+                        out.write(highlight(text, PythonLexer(), HtmlFormatter()))
+                    out.write("</div>")
+            err = InternalServerError(f"The server encountered an internal error"
+                                      f" and was unable to complete your request."
+                                      f" The error has been recorded with identifier"
+                                      f" {name!r} and will be investigated.")
+        return render_template("httperror.html", err=err), err.code
 
 @app.route("/errors", methods=["GET", "POST"])
 @enforce_auth

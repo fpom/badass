@@ -1,0 +1,46 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}User account{% endblock %}</h1>
+{% endblock %}
+{% block content %}
+        <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('user', user_id=user.id) }}" data-ajax="false">
+          <label for="email">e-mail</label>
+          <input type="email" name="email" value="{{ user.email }}">
+          <label for="firstname">first name</label>
+          <input type="text" name="firstname" value="{{ user.firstname }}">
+          <label for="firstname">last name (family name)</label>
+          <input type="text" name="lastname" value="{{ user.lastname }}">
+          <label for="studentid">student number</label>
+          <input type="number" name="studentid" value="{{ user.studentid }}">
+          <label for="group">group</label>
+          <select name="group">
+            {% if not user.group %}
+            <option disabled="" selected="" value="">-- group --</option>
+            {% endif %}
+            {% for gname, gdesc in groups.items() %}
+            {% if gname == user.group %}
+            <option value="{{ gname }}" selected="">{{ gdesc }}</option>
+            {% else %}
+            <option value="{{ gname }}">{{ gdesc }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          {% if g.user.has_role("admin") %}
+          <fieldset data-role="controlgroup" data-type="horizontal">
+            <legend>roles</legend>
+            {% for role in roles %}
+            {% if user.has_role(role) %}
+            <input type="checkbox" name="role-{{ role }}" id="role-{{ role }}" checked="">
+            {% else %}
+            <input type="checkbox" name="role-{{ role }}" id="role-{{ role }}">
+            {% endif %}
+            <label for="role-{{ role }}">{{ role }}</label>
+            {% endfor %}
+          </fieldset>
+          {% elif user.role %}
+          <label for="roles">roles</label>
+          <input type="text" name="roles" readonly="" value="{{ ' '.join(user.roles) }}">
+          {% endif %}
+          <input type="submit" value="Submit">
+        </form>
+{% endblock %}
