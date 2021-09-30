@@ -2,24 +2,23 @@
 {% block titlebar %}
 <h1>{% block title %}Badass users{% endblock %}</h1>
 {% endblock %}
-{% block head %}
-    <script src="{{ url_for('static', filename='list.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='users.js') }}"></script>
-{% endblock %}
 {% block content %}
-    <table id="users">
+    <form>
+      <input id="filter-input" data-type="search" placeholder="filter users...">
+    </form>
+    <table data-role="table" data-filter="true" data-input="#filter-input" class="ui-responsive">
       <thead>
           <th>#id</th>
-          <th><input class="search-firstname" placeholder="first name"></th>
-          <th><input class="search-lastname" placeholder="last name"></th>
-          <th><input class="search-email" placeholder="e-mail"></th>
-          <th><input class="search-group" placeholder="group"></th>
-          <th><input class="search-roles" placeholder="roles"></th>
-          <th><input class="search-studentid" placeholder="student number"></th>
-          <th><input class="search-activated" placeholder="activated"></th>
+          <th>first name</th>
+          <th>last name</th>
+          <th>e-mail</th>
+          <th>group</th>
+          <th>roles</th>
+          <th>student number</th>
+          <th>activated</th>
         </tr>
       </thead>
-      <tbody class="list">
+      <tbody>
         {% for user in users %}
         <tr>
           <td><a href="/user/{{ user.id }}" data-ajax="false">#{{ user.id }}</a></td>

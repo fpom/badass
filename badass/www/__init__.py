@@ -18,7 +18,7 @@ def walk (path, root=None,
         elif child.is_file() and child.suffix.lstrip(".").lower() in collect :
             yield child.relative_to(root)
 
-makefile_src = r"""all: static/index.js static/teacher.js
+makefile_src = r"""all: static/index.js
 
 serve: all
 	badass www -s --no-pin
