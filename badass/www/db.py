@@ -154,19 +154,8 @@ def connect (path) :
     db.define_table("submissions",
                     Field("user", "reference users"),
                     Field("date", "datetime"),
+                    Field("course", "string"),
                     Field("exercise", "string"),
-                    Field("path", "string"))
-    db.define_table("results",
-                    Field("user", "reference users"),
-                    Field("date", "datetime"),
-                    Field("submission", "reference submissions"),
-                    Field("savedto", "string"),
-                    Field("permalink", "string"))
-    db.define_table("reports",
-                    Field("user", "reference users"),
-                    Field("date", "datetime"),
-                    Field("groups", "list:string"),
-                    Field("exercises", "list:string"),
                     Field("path", "string"))
     # configuration
     config = configparser.ConfigParser()

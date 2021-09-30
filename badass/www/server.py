@@ -1,8 +1,9 @@
 import collections, time, pathlib, csv, threading, subprocess, \
     zipfile, json, secrets, os, sys, mimetypes, random, itertools, traceback
 
+from operator import or_
 from datetime import datetime
-from functools import wraps
+from functools import wraps, reduce
 from pprint import pformat
 
 from flask import Flask, abort, current_app, request, url_for, render_template, \
@@ -74,29 +75,31 @@ def load_user():
     else :
         g.user = USER()
 
+def check_auth (*l, ROLE=None, ERROR=None, **k) :
+    load_user()
+    if not g.user.authenticated or (ROLE and not g.user.has_role(ROLE)) :
+        if ERROR :
+            abort(ERROR)
+        else :
+            return redirect(url_for(*l, **k))
+
 def enforce_auth (func) :
     @wraps(func)
     def wrapper (*l, **k) :
-        if not g.user.authenticated :
-            return redirect(url_for("login"))
-        return func(*l, **k)
+        return check_auth("login") or func(*l, **k)
     return wrapper
 
 def require_login (func) :
     @wraps(func)
     def wrapper (*l, **k) :
-        if not g.user.authenticated :
-            abort(401)
-        return func(*l, **k)
+        return check_auth(ERROR=401) or func(*l, **k)
     return wrapper
 
 def require_role (role) :
     def decorator (func) :
         @wraps(func)
         def wrapper (*l, **k) :
-            if not g.user.has_role(role) :
-                abort(401)
-            return func(*l, **k)
+            return check_auth(ROLE=role, ERROR=401) or func(*l, **k)
         return wrapper
     return decorator
 
@@ -112,7 +115,14 @@ def login () :
         return redirect(url_for("login"))
     g.user = session["user"] = user
     flash(f"logged in as {user.email}", "info")
-    return redirect(url_for("index"))
+    if g.user.has_role("teacher") :
+        return redirect(url_for("teacher"))
+    elif g.user.has_role("admin") :
+        return redirect(url_for("users"))
+    elif g.user.has_role("dev") :
+        return redirect(url_for("errors"))
+    else :
+        return redirect(url_for("index"))
 
 @app.route("/logout")
 @enforce_auth
@@ -120,7 +130,7 @@ def logout () :
     session.pop("user", None)
     g.pop("user", None)
     flash("logged out", "info")
-    return redirect(url_for("index"))
+    return redirect(url_for("login"))
 
 ##
 ## asynchronous API for long running tasks
@@ -170,8 +180,8 @@ def async_api (wrapped_function) :
     return new_function
 
 @app.route("/status/<task_id>")
-@require_login
 def gettaskstatus (task_id) :
+    check_auth(ERROR=401)
     global tasks
     task = tasks.get(task_id, None)
     if task is None :
@@ -183,8 +193,8 @@ def gettaskstatus (task_id) :
         return jsonify({"wait" : True})
 
 @app.route("/result/<task_id>")
-@require_login
 def gettaskresult (task_id) :
+    check_auth(ERROR=401)
     global tasks
     task = tasks.get(task_id, None)
     if task is None :
@@ -341,9 +351,8 @@ def index () :
     form = dict(request.form)
     if form.pop("consent", None) != "on" :
         errors.append("you must certify your identity")
-    if not request.files.getlist("source") :
-        errors.append("missing source files(s)")
-    if any(not src.filename for src in request.files.getlist("source")) :
+    files = list(request.files.getlist("source"))
+    if not (files and all (src.filename for src in files)) :
         errors.append("missing source files(s)")
     if errors :
         for msg in errors :
@@ -352,24 +361,31 @@ def index () :
     # process validated query
     session["form"] = form
     # build unique dir for submission
-    entry = [form.pop("Course")]
+    course = form.pop("Course")
+    entry = [course]
     while entry[-1] in form :
         entry.append(form.pop(entry[-1]))
+    exo = "/".join(entry[1:])
     now = datetime.now()
-    entry.extend([form.pop("student"),
+    entry.extend([str(g.user.id),
                   now.strftime("%Y-%m-%d"),
                   now.strftime("%H:%M:%S.%f")])
     base = UPLOAD.joinpath(*entry)
     form["base"] = str(base)
-    base /= "src"
-    base.mkdir(parents=True, exist_ok=True)
+    srcpath = base / "src"
+    srcpath.mkdir(parents=True, exist_ok=True)
     # save files
-    for src in request.files.getlist("source") :
-        name = secure_filename(src.filename)
-        path = str(base / name)
-        src.save(path)
-    # TODO: save submission to DB
+    for src in files :
+        src.save(str(srcpath / secure_filename(src.filename)))
+    # save submission to DB
+    form["subid"] = DB.submissions.insert(user=g.user.id,
+                                          date=now,
+                                          course=course,
+                                          exercise=exo,
+                                          path=str(base))
+    DB.commit()
     # go process the submission
+    flash("your submission has been recorded", "info")
     return redirect(url_for("result"))
 
 _result_icons = {"fail" : "delete",
@@ -382,8 +398,8 @@ def check_output (*l, **k) :
 
 @app.route("/result")
 @async_api
-@require_login
 def result () :
+    check_auth(ERROR=401)
     form = session["form"]
     script = pathlib.Path(form.pop("path"))
     project = pathlib.Path(form.pop("base"))
@@ -411,7 +427,14 @@ def result () :
     permalink_path = project / "permalink"
     with permalink_path.open("w", encoding="utf-8") as out :
         out.write(permalink)
-    # TODO: save result to DB
+    # save result to DB
+    DB.results.insert(user=g.user.id,
+                      date=datetime.now(),
+                      submission=form["subid"],
+                      savedto=str(project),
+                      permalink=str(permalink))
+    DB.commit()
+    # redirect to report
     return redirect(permalink)
 
 @app.route("/report/<name>")
@@ -419,7 +442,12 @@ def result () :
 def report (name) :
     path = REPORT / name
     if path.exists() :
-        return path.read_text(encoding="utf-8")
+        if not path.suffix :
+            return path.read_text(encoding="utf-8")
+        else :
+            return send_file(path.open("rb"),
+                             as_attachment=True,
+                             attachment_filename=path.name)
     else :
         abort(404)
 
@@ -431,33 +459,47 @@ def report (name) :
 @enforce_auth
 @require_role(ROLES.teacher)
 def teacher () :
-    # TODO : add list of previous reports
+    groups = set()
+    exos = collections.defaultdict(set)
+    for row in DB(DB.users.id == DB.submissions.user).select(DB.users.group,
+                                                             DB.submissions.course,
+                                                             DB.submissions.exercise) :
+        groups.add(row.users.group)
+        exos[row.submissions.course].add(row.submissions.exercise)
     if request.method == "GET" :
-        return render_template("teacher.html")
+        return render_template("teacher.html",
+                               groups={k : v for k, v in CFG.GROUPS.items()
+                                       if k in groups},
+                               exercises=exos)
     # process validated query
-    form["group"] = request.form.getlist("group")
-    form["exercise"] = request.form.getlist("exercise")
-    session["form"] = form
+    session["groups"] = request.form.getlist("groups")
+    exos.clear()
+    for ex in request.form.getlist("exos") :
+        c, e = ex.split("/", 1)
+        exos[c].add(e)
+    session["exos"] = dict(exos)
     return redirect(url_for("marks"))
 
 @app.route("/marks")
 @async_api
-@require_login
 def marks () :
-    form = session["form"]
-    base = UPLOAD.joinpath(form["Course"])
-    now = datetime.now().strftime("%Y-%m-%d---%H-%M-%S")
-    group = "-".join(sorted(form["group"]))
-    path = UPLOAD / form["login"] / f"{group}---{now}.zip"
+    check_auth(ROLE=ROLES.teacher, ERROR=401)
+    groups = session["groups"]
+    exos = session["exos"]
+    path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
+    while path.exists() :
+        path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
     path.parent.mkdir(exist_ok=True, parents=True)
-    argv = ["python3", "-m", "badass", "report", "-p", path, "-b", base]
-    for exo in form["exercise"] :
-        argv.extend(["-e", exo])
-    for grp in list(form["group"]) :
-        argv.extend(students.groups[grp.replace(" ", "_")])
+    argv = ["python3", "-m", "badass", "report", "-o", path]
+    dbfilter = ((DB.users.id == DB.submissions.user)
+                & reduce(or_, (DB.users.group == g for g in groups))
+                & reduce(or_, ((DB.submissions.exercise == e)
+                               & (DB.submissions.course == c)
+                               for c, ex in exos.items()
+                               for e in ex)))
+    argv.extend(row.path for row in DB(dbfilter).select(DB.submissions.path))
     check_output(argv, env=ENV)
-    # TODO : redirect to /teacher and flash link to new report
-    return send_file(path.open("rb"), as_attachment=True, attachment_filename=path.name)
+    return redirect(url_for("report", name=path.name))
 
 ##
 ## errors handling
@@ -470,33 +512,34 @@ def errorpath () :
             if not path.exists() :
                 return path
 
+def handle_exception (err) :
+    if not isinstance(err, HTTPException) :
+        path = errorpath()
+        name = path.name
+        with path.open("w", encoding="utf-8") as out :
+            tb = traceback.TracebackException.from_exception(err,
+                                                             capture_locals=True)
+            out.write("<h5>Traceback</h5>\n")
+            text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
+            out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
+            if session :
+                out.write("<h5>Session</h5><div>")
+                for key, val in session.items() :
+                    out.write(f"<b><code>{key}</code></b><pre>\n")
+                    try :
+                        text = pformat(val)
+                    except :
+                        text = repr(val)
+                    out.write(highlight(text, PythonLexer(), HtmlFormatter()))
+                out.write("</div>")
+        err = InternalServerError(f"The server encountered an internal error"
+                                  f" and was unable to complete your request."
+                                  f" The error has been recorded with identifier"
+                                  f" {name!r} and will be investigated.")
+    return render_template("httperror.html", err=err), err.code
+
 if not app.config["DEBUG"] :
-    @app.errorhandler(Exception)
-    def handle_exception (err) :
-        if not isinstance(err, HTTPException) :
-            path = errorpath()
-            name = path.name
-            with path.open("w", encoding="utf-8") as out :
-                tb = traceback.TracebackException.from_exception(err,
-                                                                 capture_locals=True)
-                out.write("<h5>Traceback</h5>\n")
-                text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
-                out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
-                if session :
-                    out.write("<h5>Session</h5><div>")
-                    for key, val in session.items() :
-                        out.write(f"<b><code>{key}</code></b><pre>\n")
-                        try :
-                            text = pformat(val)
-                        except :
-                            text = repr(val)
-                        out.write(highlight(text, PythonLexer(), HtmlFormatter()))
-                    out.write("</div>")
-            err = InternalServerError(f"The server encountered an internal error"
-                                      f" and was unable to complete your request."
-                                      f" The error has been recorded with identifier"
-                                      f" {name!r} and will be investigated.")
-        return render_template("httperror.html", err=err), err.code
+    handle_exception = app.errorhandler(Exception)(handle_exception)
 
 @app.route("/errors", methods=["GET", "POST"])
 @enforce_auth

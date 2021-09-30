@@ -22,7 +22,7 @@
       <tbody class="list">
         {% for user in users %}
         <tr>
-          <td><a href="/user/{{ user.id }}">#{{ user.id }}</a></td>
+          <td><a href="/user/{{ user.id }}" data-ajax="false">#{{ user.id }}</a></td>
           <td class="firstname">{{ user.firstname }}</td>
           <td class="lastname">{{ user.lastname }}</td>
           <td class="email"><a href="mailto:{{ user.email }}">{{ user.email }}</a></td>

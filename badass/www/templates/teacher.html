@@ -2,10 +2,24 @@
 {% block titlebar %}
 <h1>{% block title %}Teacher interface{% endblock %}</h1>
 {% endblock %}
-{% block head %}
-    <script src="{{ url_for('static', filename='teacher.js') }}"></script>
-{% endblock %}
 {% block content %}
         <form id="form" method=POST action="{{ url_for('teacher') }}" data-ajax="false">
+          <select name="groups" id="groups" multiple="multiple" data-native-menu="false" data-icon="grid" data-iconpos="left">
+            <option>groups to include</option>
+            {% for gname, gdesc in groups.items() %}
+            <option value="{{ gname }}">{{ gname }}: {{ gdesc }}</option>
+            {% endfor %}
+          </select>
+          <select name="exos" id="exos" multiple="multiple" data-native-menu="false" data-icon="grid" data-iconpos="left">
+            <option>courses &amp; exercises to include</option>
+            {% for course, exos in exercises.items() %}
+            <optgroup label="{{ course }}">
+              {% for ex in exos %}
+              <option value="{{ course }}/{{ ex }}">{{ ex }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <input type="submit" value="Submit">
         </form>
 {% endblock %}

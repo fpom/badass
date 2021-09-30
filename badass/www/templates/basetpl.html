@@ -17,22 +17,22 @@
         <div data-role="navbar">
           <ul>
             {% if g.user.authenticated %}
-            <li><a href="/">submit</a></li>
-            <li><a href="/user/{{ g.user.id }}">account</a></li>
+            <li><a href="/" data-ajax="false">submit</a></li>
+            <li><a href="/user/{{ g.user.id }}" data-ajax="false">account</a></li>
             {% if g.user.has_role("teacher") %}
-            <li><a href="/teacher">teacher</a></li>
+            <li><a href="/teacher" data-ajax="false">teacher</a></li>
             {% endif %}
             {% if g.user.has_role("admin") %}
-            <li><a href="/users">users</a></li>
+            <li><a href="/users" data-ajax="false">users</a></li>
             {% endif %}
             {% if g.user.has_role("dev") %}
-            <li><a href="/errors">errors</a></li>
+            <li><a href="/errors" data-ajax="false">errors</a></li>
             {% endif %}
-            <li><a href="/logout">logout</a></li>
+            <li><a href="/logout" data-ajax="false">logout</a></li>
             {% else %}
-            <li><a href="/login">login</a></li>
-            <li><a href="/reset">reset password</a></li>
-            <li><a href="/register">create account</a></li>
+            <li><a href="/login" data-ajax="false">login</a></li>
+            <li><a href="/reset" data-ajax="false">reset password</a></li>
+            <li><a href="/register" data-ajax="false">create account</a></li>
             {% endif %}
           </ul>
         </div>
