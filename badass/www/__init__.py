@@ -95,8 +95,8 @@ def _input (name, default, check=lambda v: True, valid=None, read=input,
 
 def add_user (args) :
     from getpass import getpass
-    from .db import connect
-    from .mkpass import strong
+    from ..db import connect
+    from ..mkpass import strong
     DB, CFG, USER, ROLES = connect(args.dbpath)
     fields = {"email" : _input("email", args.email),
               "firstname" : _input("first name", args.firstname),

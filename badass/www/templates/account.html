@@ -37,9 +37,9 @@
             <label for="role-{{ role }}">{{ role }}</label>
             {% endfor %}
           </fieldset>
-          {% elif user.role %}
+          {% elif user.roles %}
           <label for="roles">roles</label>
-          <input type="text" name="roles" readonly="" value="{{ ' '.join(user.roles) }}">
+          <input type="text" name="roles" readonly="" value="{{ user.roles|join(', ') }}">
           {% endif %}
           <input type="submit" value="Submit">
         </form>

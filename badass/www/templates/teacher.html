@@ -4,22 +4,26 @@
 {% endblock %}
 {% block content %}
         <form id="form" method=POST action="{{ url_for('teacher') }}" data-ajax="false">
-          <select name="groups" id="groups" multiple="multiple" data-native-menu="false" data-icon="grid" data-iconpos="left">
-            <option>groups to include</option>
-            {% for gname, gdesc in groups.items() %}
-            <option value="{{ gname }}">{{ gname }}: {{ gdesc }}</option>
-            {% endfor %}
-          </select>
-          <select name="exos" id="exos" multiple="multiple" data-native-menu="false" data-icon="grid" data-iconpos="left">
-            <option>courses &amp; exercises to include</option>
-            {% for course, exos in exercises.items() %}
-            <optgroup label="{{ course }}">
-              {% for ex in exos %}
-              <option value="{{ course }}/{{ ex }}">{{ ex }}</option>
+          <fieldset data-role="controlgroup">
+            <input data-type="search" id="filter-groups" placeholder="groups">
+            <div data-filter="true" data-input="#filter-groups">
+              {% for gname, gdesc in groups.items() | sort %}
+              <input type="checkbox" name="grp-{{ gname }}" id="grp-{{ gname }}">
+              <label for="grp-{{ gname }}">{{ gname }}: {{ gdesc }}</label>
               {% endfor %}
-            </optgroup>
-            {% endfor %}
-          </select>
+            </div>
+          </fieldset>
+          <fieldset data-role="controlgroup">
+            <input data-type="search" id="filter-exos" placeholder="exercises">
+            <div data-filter="true" data-input="#filter-exos">
+              {% for c, exos in exercises.items() | sort %}
+              {% for e in exos | sort %}
+              <input type="checkbox" name="exo-{{ c }}-{{ e }}" id="exo-{{ c }}-{{ e }}">
+              <label for="exo-{{ c }}-{{ e }}">{{ c }}: {{ e }}</label>
+              {% endfor %}
+              {% endfor %}
+            </div>
+          </fieldset>
           <input type="submit" value="Submit">
         </form>
 {% endblock %}

@@ -10,24 +10,8 @@ pip: clean
 test:
 	make install
 	badass www -i test
-	badass www -a test/data \
-		--email foo@spam \
-		--first-name Foo \
-		--last-name Spammer \
-		--group TEST \
-		--student-id 1234 \
-		--no-roles \
-		--password FOO@sp4m \
-		--no-activated
-	badass www -a test/data \
-                --email bar@nospam \
-                --first-name Bar \
-                --last-name Tsimpson \
-                --no-group \
-                --no-student-id \
-                --role dev --role admin --role teacher \
-                --password BAR@n0sp4m \
-		--no-activated
+	python3 test-data/mktest.py
+	cp -r test-data/upload test/
 	make -C test serve
 
 retest:

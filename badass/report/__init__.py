@@ -1,54 +1,103 @@
-import sys, tempfile
+import sys, tempfile, io
 
-from collections import namedtuple
+from functools import reduce
+from operator import or_
+from pathlib import Path
+from collections import namedtuple, defaultdict
 from zipfile import ZipFile, ZIP_STORED, ZIP_LZMA
 from io import StringIO
 from csv import DictReader, DictWriter
 
 from .. import encoding
+from ..db import connect
 
-pd = Workbook = dataframe_to_rows = PatternFill = Alignment = None
-
-submission = namedtuple("submission", ["student", "exercise", "date", "path"])
-
-_test = {"pass" : 0,
-         "warn" : 1,
-         "fail" : 2}
+class Test (object) :
+    _TEST = {"pass" : 0,
+             "warn" : 1,
+             "fail" : 2}
+    NAMES = {}
+    def __init__ (self, val, num=None) :
+        self.val = val
+        self.num = num
+        self.children = []
+    def value (self) :
+        if self.children :
+            return sum(c.value() for c in self.children) / len(self.children)
+        else :
+            return self.val
+    def __iter__ (self) :
+        if self.children :
+            if self.num :
+                yield self.num, self.val
+            for child in self.children :
+                yield from child
+        else :
+            yield self.num, self.val
+    @classmethod
+    def from_csv (cls, stream) :
+        nodes = {"" : cls(0)}
+        names = {}
+        for row in DictReader(stream) :
+            num = row["test"]
+            dot = f".{num}"
+            nodes[dot] = cls(cls._TEST[row["status"]], num)
+            nodes[dot.rsplit(".", 1)[0]].children.append(nodes[dot])
+            if row["auto"] != "True" :
+                names[num] = row["text"]
+        if not cls.NAMES :
+            cls.NAMES.update(names)
+        else :
+            for num in list(cls.NAMES) :
+                if num not in names :
+                    del cls.NAMES[num]
+                else :
+                    cls.NAMES[num] = cls._prefix(cls.NAMES[num], names[num])
+        return nodes[""]
+    @classmethod
+    def _prefix (cls, first, *rest) :
+        cut = min(len(first), *(len(s) for s in rest))
+        while not all(first[:cut] == s[:cut] for s in rest) :
+            cut -= 1
+        if cut < max(len(first), *(len(s) for s in rest)) :
+            return first[:cut] + "…"
+        else :
+            return first[:cut]
+    @classmethod
+    def headers (cls) :
+        yield from sorted(cls.NAMES.items())
 
 class Report (object) :
-    def __init__ (self, base, exercises, students) :
+    def __init__ (self, dbpath, groups, exercises) :
         # only load if necessary to speedup prog startup
-        global pd, Workbook, dataframe_to_rows, PatternFill, Alignment
-        import pandas as pd
+        global Workbook, dataframe_to_rows, PatternFill, Alignment
         from openpyxl import Workbook
-        from openpyxl.utils.dataframe import dataframe_to_rows
         from openpyxl.styles import PatternFill, Alignment
         #
-        self.base = base
+        DB, CFG, _, _ = connect(dbpath)
+        exos_by_course = defaultdict(set)
+        for ex in exercises :
+            c, e = ex.split("/", 1)
+            exos_by_course[c].add(e)
+        self.xlsx_init()
         self.content = []
-        self.df = []
-        for exo in exercises :
-            self.reports = []
-            for filepath in self._walk(base / exo) :
-                head = None
-                parts = filepath.relative_to(base).parts
-                for i, p in enumerate(parts) :
-                    if p in students :
-                        head, tail = parts[:i+1], parts[i+1:]
-                        break
-                if head is None :
-                    continue
-                if tail[-1] == "report.zip" :
-                    *exercise, student = head
-                    day, time, *path = tail
-                    date = f"{day} {time}"
-                    self.reports.append(submission(student, "/".join(exercise), date,
-                                                   filepath.parent))
-                self.content.append(filepath)
-            self.reports.sort()
-            self.load_data(exo)
-            self.update_data()
+        for c, exos in sorted(exos_by_course.items()) :
+            for e in sorted(exos) :
+                self.xlsx_new_ws(f"{c}-{e}")
+                dbfilter = ((DB.users.id == DB.submissions.user)
+                            & reduce(or_, (DB.users.group == g for g in groups))
+                            & (DB.submissions.exercise == e)
+                            & (DB.submissions.course == c))
+                for row in DB(dbfilter).select(DB.users.firstname,
+                                               DB.users.lastname,
+                                               DB.users.studentid,
+                                               DB.users.group,
+                                               DB.submissions.date,
+                                               DB.submissions.path) :
+                    self.xlsx_add_row(row)
+                    self.content.extend(self._walk(row.submissions.path))
+                self.xlsx_done_ws()
     def _walk (self, root) :
+        root = Path(root)
         if root.is_dir() :
             for path in root.iterdir() :
                 if path.is_file() :
@@ -57,7 +106,7 @@ class Report (object) :
                     yield from self._walk(path)
     def save (self, path) :
         with ZipFile(path, "w", compression=ZIP_STORED) as zf :
-            zf.writestr("report.xlsx", self.xlsx(),
+            zf.writestr("report.xlsx", self.xlsx_data(),
                         compress_type=ZIP_LZMA, compresslevel=9)
             for cont in self.content :
                 if cont.suffix == ".zip" :
@@ -65,174 +114,122 @@ class Report (object) :
                 else :
                     comp = {"compress_type" : ZIP_LZMA,
                             "compresslevel" : 9}
-                zf.write(cont, cont.relative_to(self.base), **comp)
-    def load_data (self, exercise) :
-        users = pd.read_csv("data/students.csv")
-        headers = {(0, 1) : "student",
-                   (0, 2) : "name",
-                   (0, 3) : "exercise",
-                   (0, 4) : "score",
-                   (0, 5) : "total",
-                   (0, 6) : "date",
-                   (0, 7) : "missing report",
-                   (sys.maxsize, 0) : "permalink"}
-        csv_data = {}
-        permalink = {}
-        for sub in self.reports :
-            try :
-                path = sub.path / "report.zip"
-                with ZipFile(path) as zf :
-                    data = csv_data[sub.path] = zf.read("report.csv").decode(**encoding)
-            except :
-                continue
-            permalink[sub.path] = (sub.path / "permalink").read_text(**encoding)
-            data = StringIO(data)
-            reader = DictReader(data)
-            for row in reader :
-                num = tuple(int(n) for n in str(row["test"]).split("."))
-                if num not in headers and row["auto"] == "False" :
-                    headers[num] = f"{row['test']}. {row['text']}"
-        raw_data = StringIO()
-        out = DictWriter(raw_data, [v for _, v in sorted(headers.items())])
-        out.writeheader()
-        for sub in self.reports :
-            outrow = {"student" : sub.student,
-                      "name" : "",
-                      "exercise" : sub.exercise,
-                      "date" : sub.date,
-                      "missing report" : 0}
-            row = users[users["login"] == sub.student]
-            if not row.empty :
-                record = next(row.iterrows())[1]
-                outrow["name"] = f"{record['surname']} {record['name'].upper()}"
-            if sub.path not in csv_data :
-                outrow["missing report"] = 1
-            else :
-                outrow["permalink"] = permalink[sub.path]
-                reader = DictReader(StringIO(csv_data[sub.path]))
-                for row in reader :
-                    num = tuple(int(n) for n in str(row["test"]).split("."))
-                    if num in headers :
-                        outrow[headers[num]] = _test[row["status"]]
-                score = count = 0
-                for num in headers :
-                    if len(num) == 1 :
-                        score += outrow[headers[num]]
-                        count += 1
-                outrow["score"] = 2 * count - score
-                outrow["total"] = 2 * count
-            out.writerow(outrow)
-        raw_data.seek(0)
-        df = pd.read_csv(raw_data,
-                         converters={"student" : str,
-                                     "date" : pd.to_datetime,
-                                     "missing report" : lambda c : bool(int(c))})
-        self.df.append((exercise, df))
-    def update_data (self) :
-        _, df = self.df[-1]
-        df.insert(df.columns.get_loc("score"), "mark", df["score"] / df["total"])
-        df.insert(df.columns.get_loc("score"), "best", False)
-        first = None
-        last = (None, None)
-        for idx, row in df.iterrows() :
-            if (row["student"], row["exercise"]) != last :
-                if first is not None :
-                    best = df.loc[first:idx-1, "score"]
-                    df.loc[first:idx-1, "best"] = best.eq(best.max())
-                first = idx
-                last = (row["student"], row["exercise"])
-        best = df.loc[first:, "score"]
-        df.loc[first:, "best"] = best.eq(best.max())
-    def xlsx (self) :
-        # convert dataframe into a workbook
-        wb = Workbook()
-        wb.remove(wb.active)
-        for exo, df in self.df :
-            ws = self.ws = wb.create_sheet(exo)
-            self._xlsx(ws, df)
-        # save workbook and return it
+                zf.write(cont, cont.relative_to("upload"), **comp)
+    def xlsx_init (self) :
+        self.wb = Workbook()
+        self.wb.remove(self.wb.active)
+    def xlsx_data (self) :
         with tempfile.NamedTemporaryFile(mode="w+b", suffix=".xlsx") as tmp :
-            wb.save(tmp.name)
+            self.wb.save(tmp.name)
             tmp.seek(0)
             return tmp.read()
-    def _xlsx (self, ws, df) :
-        for row in dataframe_to_rows(df, index=False, header=True):
-            ws.append(row)
-        # styling
-        STYLES = {"student" : None,
-                  "name" : None,
-                  "exercise" : None,
-                  "mark" : self._xlsx_style_mark,
-                  "best" : None,
-                  "score" : None,
-                  "total" : None,
-                  "date" : None,
-                  "missing report" : None,
-                  "permalink" : self._xlsx_style_link}
-        self.cname = cname = {cell.value : cell.column_letter for cell in ws[1]}
-        for name, num in cname.items() :
-            style = STYLES.get(name, self._xlsx_style_test)
-            if isinstance(style, str) :
-                for cell in ws[num] :
-                    if cell.row > 1 :
-                        cell.style = style
-            elif callable(style) :
-                for cell in ws[num] :
-                    if cell.row > 1 :
-                        style(cell)
-        for cell in ws[cname["missing report"]] :
-            if cell.value :
-                for c in ws[cell.row] :
-                    c.fill = PatternFill("solid", fgColor="AAAAAAAA")
-        for cell in ws[cname["date"]] :
-            if cell.row > 1 :
-                cell.number_format = "MM-DD HH:MM"
-        for cell in ws[1] :
-            cell.style = "Note"
-            if cell.value not in STYLES :
-                cell.alignment = Alignment(textRotation=90)
-        # resizing
-        WIDTH = {"student" : 12,
-                 "name" : 16,
-                 "exercise" : 12,
-                 "mark" : 8,
-                 "best" : 8,
-                 "score" : 0,
-                 "total" : 0,
-                 "date" : 12,
-                 "missing report" : 0,
-                 "permalink" : 10}
-        for name, num in cname.items() :
-            width = WIDTH.get(name, 3)
-            if width == 0 :
-                ws.column_dimensions[num].hidden = True
+    def xlsx_new_ws (self, name) :
+        self.ws = self.wb.create_sheet(name)
+        self.headers = ["student", "name", "group", "score", "best", "date", "report"]
+        self.rows = []
+        self.best = {}
+    def xlsx_add_row (self, row) :
+        path = Path(row.submissions.path)
+        report = path / "report.zip"
+        name = f"{row.users.lastname.upper()} {row.users.firstname.title()}"
+        if not report.exists() :
+            self.rows.append([row.users.studentid,
+                              name,
+                              row.users.group,
+                              "CRASH",
+                              False,
+                              row.submissions.date])
+            return
+        with ZipFile(report) as zf :
+            test_data = io.StringIO(zf.read("report.csv").decode(**encoding))
+        test = Test.from_csv(test_data)
+        permalink = (path / "permalink").read_text(**encoding)
+        score = 1 - test.value()
+        self.best[row.users.studentid] = max(score,
+                                             self.best.get(row.users.studentid, 0))
+        self.rows.append([row.users.studentid,
+                          name,
+                          row.users.group,
+                          score,
+                          False,
+                          row.submissions.date,
+                          permalink,
+                          dict(test)])
+    def _xlsx_add_row (self, row, values, styles=None, formats=None) :
+        if not isinstance(styles, (list, tuple)) :
+            styles = [styles] * len(values)
+        if not isinstance(formats, (list, tuple)) :
+            formats = [formats] * len(values)
+        for col, (val, sty, fmt) in enumerate(zip(values, styles, formats), 1) :
+            cell = self.ws.cell(column=col, row=row, value=val)
+            if callable(sty) :
+                sty(cell)
+            elif sty is not None :
+                cell.style = sty
+            if callable(fmt) :
+                fmt(cell)
+            elif fmt is not None :
+                cell.number_format = fmt
+    def xlsx_done_ws (self) :
+        self.rows.sort(key=lambda row: (row[0], row[5]))
+        # write headers
+        tests = list(Test.headers())
+        self.headers.extend(f"{num}. {txt}" for num, txt in tests)
+        self._xlsx_add_row(1, self.headers, styles=self._xlsx_style_head)
+        # additional headers style
+        self.ws.row_dimensions[1].height = 200
+        self.ws.auto_filter.ref = self.ws.dimensions
+        # write rows
+        for num, row in enumerate(self.rows, 2) :
+            if row[3] == "CRASH" :
+                styles = "Bad"
+                formats = [None, None, None, None,
+                           self._xlsx_format_best,
+                           self._xlsx_format_date]
             else :
-                ws.column_dimensions[num].width = width
-        ws.row_dimensions[1].height = 200
-        # add filter
-        ws.auto_filter.ref = ws.dimensions
+                # update best column = row[4]
+                # row[0] = studentid / row[3] = score
+                best = row[4] = (row[3] == self.best.get(row[0], None))
+                if best :
+                    styles = ["Good" if hdr in self._HEAD_WIDTH
+                              else self._xlsx_style_mark
+                              for hdr in self.headers]
+                else :
+                    styles = [None if hdr in self._HEAD_WIDTH
+                              else self._xlsx_style_mark
+                              for hdr in self.headers]
+                formats = [getattr(self, f"_xlsx_format_{hdr}", None)
+                           for hdr in self.headers]
+                test = row.pop(-1)
+                row.extend(test[num] for num, _ in tests)
+            self._xlsx_add_row(num, row, styles=styles, formats=formats)
+    _HEAD_WIDTH = {"student" : 12,
+                   "name" : 16,
+                   "group" : 8,
+                   "score" : 8,
+                   "best" : 8,
+                   "date" : 12,
+                   "report" : 8}
+    def _xlsx_style_head (self, cell) :
+        cell.style = "Note"
+        if cell.value not in self._HEAD_WIDTH :
+            cell.alignment = Alignment(textRotation=90)
+        width = self._HEAD_WIDTH.get(cell.value, 3)
+        self.ws.column_dimensions[cell.column_letter].width = width
     def _xlsx_style_mark (self, cell) :
-        best = self.ws[f"{self.cname['best']}{cell.row}"]
-        if best.value :
-            style = "Good"
-        else :
-            style = "Normal"
-        for col in ("student", "name", "exercise", "mark", "best", "date") :
-            self.ws[f"{self.cname[col]}{cell.row}"].style = style
-        if not pd.isna(cell.value) :
-            cell.value = (f"={self.cname['score']}{cell.row}"
-                          f"/{self.cname['total']}{cell.row}")
-        cell.number_format = "0%"
-        best.number_format = "BOOLEAN"
-    def _xlsx_style_test (self, cell) :
         if cell.value == 0 :
             cell.style = "Good"
         elif cell.value == 1 :
             cell.style = "Neutral"
-        else :
+        elif cell.value == 2 :
             cell.style = "Bad"
-    def _xlsx_style_link (self, cell) :
+    def _xlsx_format_score (self, cell) :
+        cell.number_format = "0%"
+    def _xlsx_format_best (self, cell) :
+        cell.number_format = "BOOLEAN"
+    def _xlsx_format_date (self, cell) :
+        cell.number_format = "MM-DD HH:MM"
+    def _xlsx_format_report (self, cell) :
         if isinstance(cell.value, str) :
             cell.hyperlink = cell.value
-            cell.value = "see report"
-        return "Hyperlink"
+            cell.value = "link"

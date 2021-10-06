@@ -17,8 +17,8 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.formatters import HtmlFormatter
 
-from .db import connect
-from .mkpass import pwgen
+from ..db import connect
+from ..mkpass import pwgen
 
 import badass
 
@@ -455,10 +455,11 @@ def report (name) :
 ## teachers interface
 ##
 
-@app.route("/teacher", methods=["GET", "POST"])
+@app.route('/teacher/', defaults={"path" : None}, methods=["GET", "POST"])
+@app.route("/teacher/<path>", methods=["GET"])
 @enforce_auth
 @require_role(ROLES.teacher)
-def teacher () :
+def teacher (path) :
     groups = set()
     exos = collections.defaultdict(set)
     for row in DB(DB.users.id == DB.submissions.user).select(DB.users.group,
@@ -467,39 +468,40 @@ def teacher () :
         groups.add(row.users.group)
         exos[row.submissions.course].add(row.submissions.exercise)
     if request.method == "GET" :
+        if path :
+            url = url_for("report", name=path)
+            flash(Markup(f'<a href="{url}" data-ajax="false">download report</a>'),
+                  "info")
         return render_template("teacher.html",
                                groups={k : v for k, v in CFG.GROUPS.items()
                                        if k in groups},
                                exercises=exos)
-    # process validated query
-    session["groups"] = request.form.getlist("groups")
-    exos.clear()
-    for ex in request.form.getlist("exos") :
-        c, e = ex.split("/", 1)
-        exos[c].add(e)
-    session["exos"] = dict(exos)
+    session["groups"] = grp = []
+    session["exos"] = exo = []
+    for key, val in request.form.items() :
+        if val != "on" :
+            continue
+        elif key.startswith("grp-") :
+            grp.append(key[4:])
+        elif key.startswith("exo-") :
+            exo.append(key[4:].replace("-", "/", 1))
     return redirect(url_for("marks"))
 
 @app.route("/marks")
 @async_api
 def marks () :
     check_auth(ROLE=ROLES.teacher, ERROR=401)
-    groups = session["groups"]
-    exos = session["exos"]
     path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
     while path.exists() :
         path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
     path.parent.mkdir(exist_ok=True, parents=True)
-    argv = ["python3", "-m", "badass", "report", "-o", path]
-    dbfilter = ((DB.users.id == DB.submissions.user)
-                & reduce(or_, (DB.users.group == g for g in groups))
-                & reduce(or_, ((DB.submissions.exercise == e)
-                               & (DB.submissions.course == c)
-                               for c, ex in exos.items()
-                               for e in ex)))
-    argv.extend(row.path for row in DB(dbfilter).select(DB.submissions.path))
+    exos = session["exos"]
+    argv = (["python3", "-m", "badass", "report", "-o", path]
+            + ["-d", "data"]
+            + ["-g"] + list(session["groups"])
+            + ["-e"] + list(session["exos"]))
     check_output(argv, env=ENV)
-    return redirect(url_for("report", name=path.name))
+    return redirect(url_for("teacher", path=str(path.name)))
 
 ##
 ## errors handling
