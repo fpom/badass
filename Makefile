@@ -11,7 +11,7 @@ test:
 	make install
 	badass www -i test
 	python3 test-data/mktest.py
-	cp -r test-data/upload test/
+	cp -r test-data/upload test-data/errors test/
 	make -C test serve
 
 retest:

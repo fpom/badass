@@ -1,17 +1,11 @@
 {% extends "basetpl.html" %}
 {% block titlebar %}
-<h1>{% block title %}Error tracker{% endblock %}</h1>
+<h1>{% block title %}Error {{ error }}{% endblock %}</h1>
+{% endblock %}
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('asset', kind='s', name='pygments.css') }}"/>
 {% endblock %}
 {% block content %}
-        {% if report %}
-        {{ report }}
-        <h5>Track another error</h5>
-        {% endif %}
-        <form id="form" method=POST action="{{ url_for('error') }}" data-ajax="false">
-          <label for="error">Error identifier</label>
-          <input type="text" name="error" value="{{ form.get('error', '') }}">
-          <label for="delete" class="danger">Delete report</label>
-          <input type="checkbox" name="delete" unchecked>
-          <input type="submit" value="Submit">
-        </form>
+    {{ report }}
+    <a href="/error/{{ error }}/delete" data-ajax="false" class="ui-btn ui-btn-inline ui-icon-delete ui-btn-icon-left">delete</a>
 {% endblock %}

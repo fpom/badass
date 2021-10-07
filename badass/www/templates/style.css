@@ -1,3 +1,11 @@
+.badass-errors {
+    line-height: 300%;
+}
+
+.badass-errors span {
+    padding: 10px;
+}
+
 .badass form {
     width: 100%;
 }

@@ -1,5 +1,5 @@
-import collections, time, pathlib, csv, threading, subprocess, \
-    zipfile, json, secrets, os, sys, mimetypes, random, itertools, traceback
+import collections, time, pathlib, csv, threading, zipfile, json, subprocess, \
+    secrets, os, sys, mimetypes, random, itertools, traceback, re, ast
 
 from operator import or_
 from datetime import datetime
@@ -393,8 +393,7 @@ _result_icons = {"fail" : "delete",
                  "pass" : "check"}
 
 def check_output (*l, **k) :
-    proc = subprocess.run(*l, **k, capture_output=True)
-    proc.check_returncode()
+    subprocess.run(*l, **k, check=True, capture_output=True)
 
 @app.route("/result")
 @async_api
@@ -514,6 +513,21 @@ def errorpath () :
             if not path.exists() :
                 return path
 
+_tb = re.compile(r"b(['\"])Traceback \(most recent call last\):(.|\\\1|\1\1\1)*(\1)")
+
+def format_tb (txt, out) :
+    unique = {}
+    for match in _tb.finditer(txt) :
+        matched = match.group()
+        unique[matched] = ast.literal_eval(matched)
+    for num, (match, pystr) in enumerate(unique.items(), 1) :
+        txt = txt.replace(match, f"{match[1]}SEE TRACEBACK #{num}{match[1]}")
+    out.write('<div data-role="footer"><h5>TRACEBACK #0</h5></div>\n')
+    out.write(highlight(txt, PythonTracebackLexer(), HtmlFormatter()))
+    for num, (match, pystr) in enumerate(unique.items(), 1) :
+        out.write(f'<div data-role="footer"><h5>TRACEBACK #{num}</h5></div>\n')
+        out.write(highlight(pystr, PythonTracebackLexer(), HtmlFormatter()))
+
 def handle_exception (err) :
     if not isinstance(err, HTTPException) :
         path = errorpath()
@@ -521,11 +535,10 @@ def handle_exception (err) :
         with path.open("w", encoding="utf-8") as out :
             tb = traceback.TracebackException.from_exception(err,
                                                              capture_locals=True)
-            out.write("<h5>Traceback</h5>\n")
             text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
-            out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
+            format_tb(text, out)
             if session :
-                out.write("<h5>Session</h5><div>")
+                out.write('<div data-role="footer"><h5>SESSION</h5></div><div>')
                 for key, val in session.items() :
                     out.write(f"<b><code>{key}</code></b><pre>\n")
                     try :
@@ -543,23 +556,27 @@ def handle_exception (err) :
 if not app.config["DEBUG"] :
     handle_exception = app.errorhandler(Exception)(handle_exception)
 
-@app.route("/errors", methods=["GET", "POST"])
+@app.route("/errors")
 @enforce_auth
 @require_role(ROLES.dev)
-def error () :
-    if request.method == "GET" :
-        return render_template("error.html", report=None, form={})
-    form = dict(request.form)
-    try :
-        if not form["error"] :
-            raise Exception()
-        path = ERROR / form["error"]
-        report = path.read_text(encoding="utf-8")
-    except :
-        flash(f"invalid error identifier {form.pop('error','')!r}", "error")
-        return render_template("error.html", report=None, form=form)
-    if form.get("delete", None) == "on" :
-        path.unlink()
-        form.pop("error", None)
-    return render_template("error.html", report=Markup(report), form=form)
+def errors () :
+    err = []
+    for path in ERROR.glob("*") :
+        err.append(path.name)
+    return render_template("errors.html", errors=err)
 
+@app.route("/error/<ident>/<action>")
+@enforce_auth
+@require_role(ROLES.dev)
+def error (ident, action) :
+    err = ERROR / ident
+    if not err.exists() :
+        abort(404)
+    elif action == "delete" :
+        err.unlink()
+        return redirect(url_for("errors"))
+    elif action == "show" :
+        txt = err.read_text(encoding="utf-8")
+        return render_template("error.html", report=Markup(txt), error=err.stem)
+    else :
+        abort(404)

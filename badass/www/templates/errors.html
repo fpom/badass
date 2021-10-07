@@ -1,0 +1,17 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}Error tracker{% endblock %}</h1>
+{% endblock %}
+{% block content %}
+    <form>
+      <input id="filter-input" data-type="search" placeholder="filter errors...">
+    </form>
+    <div class="badass-errors" data-filter="true" data-input="#filter-input">
+      {% for err in errors | sort %}
+      <span data-role="controlgroup" data-type="horizontal">
+        <a href="/error/{{ err }}/show" data-ajax="false"  class="ui-btn ui-btn-inline ui-icon-eye  ui-btn-icon-left">{{ err }}</a>
+        <a href="/error/{{ err }}/delete" data-ajax="false" class="ui-btn ui-btn-inline ui-icon-delete ui-btn-icon-left">delete</a>
+      </span>
+      {% endfor %}
+    </div>
+{% endblock %}
