@@ -29,7 +29,7 @@ static/%.js: forms/%.yaml
 
 def copy_static (target_dir, clobber=False) :
     # directories
-    for child in ("data", "forms", "reports", "scripts", "static", "upload", "errors") :
+    for child in ("data", "reports", "scripts", "static", "upload", "errors") :
         (target_dir / child).mkdir(exist_ok=True, parents=True)
     # resource files
     root = Path(__file__).parent

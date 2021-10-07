@@ -426,13 +426,6 @@ def result () :
     permalink_path = project / "permalink"
     with permalink_path.open("w", encoding="utf-8") as out :
         out.write(permalink)
-    # save result to DB
-    DB.results.insert(user=g.user.id,
-                      date=datetime.now(),
-                      submission=form["subid"],
-                      savedto=str(project),
-                      permalink=str(permalink))
-    DB.commit()
     # redirect to report
     return redirect(permalink)
 
