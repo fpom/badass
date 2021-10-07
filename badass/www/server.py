@@ -393,10 +393,7 @@ _result_icons = {"fail" : "delete",
                  "pass" : "check"}
 
 def check_output (*l, **k) :
-    proc = subprocess.run(*l, **k, check=True, capture_output=True)
-    with open("out.log", "wb") as out :
-        out.write(proc.stdout)
-        out.write(proc.stderr)
+    subprocess.run(*l, **k, check=True, capture_output=True)
 
 @app.route("/result")
 @async_api
