@@ -1,0 +1,26 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}Create your account{% endblock %}</h1>
+{% endblock %}
+{% block content %}
+        <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('register') }}" data-ajax="false">
+          <label for="email">e-mail</label>
+          <input type="email" name="email">
+          <label for="firstname">first name</label>
+          <input type="text" name="firstname">
+          <label for="firstname">last name (family name)</label>
+          <input type="text" name="lastname">
+          <label for="studentid">student number</label>
+          <input type="number" name="studentid">
+          <label for="group">group</label>
+          <select name="group">
+            <option disabled="" selected="" value="">-- group --</option>
+            {% for gname, gdesc in groups.items() %}
+            <option value="{{ gname }}">{{ gname }}: {{ gdesc }}</option>
+            {% endfor %}
+          </select>
+          <label for="code">course code</label>
+          <input type="password" name="code">
+          <input type="submit" value="Submit">
+        </form>
+{% endblock %}

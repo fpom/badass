@@ -1,0 +1,40 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}Badass users{% endblock %}</h1>
+{% endblock %}
+{% block content %}
+    <form>
+      <input id="filter-input" data-type="search" placeholder="filter users...">
+    </form>
+    <table data-role="table" data-filter="true" data-input="#filter-input" class="ui-responsive">
+      <thead>
+          <th>#id</th>
+          <th>first name</th>
+          <th>last name</th>
+          <th>e-mail</th>
+          <th>group</th>
+          <th>roles</th>
+          <th>student number</th>
+          <th>activated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td><a href="/user/{{ user.id }}" data-ajax="false">#{{ user.id }}</a></td>
+          <td class="firstname">{{ user.firstname }}</td>
+          <td class="lastname">{{ user.lastname }}</td>
+          <td class="email"><a href="mailto:{{ user.email }}">{{ user.email }}</a></td>
+          {% if user.group %}
+          <td class="group">{{ user.group }}: {{ groups[user.group] }}</td>
+          {% else %}
+          <td class="group"></td>
+          {% endif %}
+          <td class="roles">{{ user.roles|join(", ") }}</td>
+          <td class="studentid">{{ user.studentid }}</td>
+          <td class="activated">{{ "yes" if user.activated else "no" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+{% endblock %}

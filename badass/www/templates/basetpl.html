@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{% block title %}{% endblock %}</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('asset', kind='s', name='jquery.mobile-1.4.5.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('asset', kind='t', name='style.css') }}"/>
+    <script src="{{ url_for('asset', kind='s', name='jquery-1.11.1.min.js') }}"></script>
+    <script src="{{ url_for('asset', kind='s', name='jquery.mobile-1.4.5.min.js') }}"></script>
+    <link rel="shortcut icon" href="{{ url_for('asset', kind='s', name='favicon.ico') }}">
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <div data-role="page">
+      <div data-role="header">
+        {% block navbar %}
+        <div data-role="navbar">
+          <ul>
+            {% if g.user.authenticated %}
+            <li><a href="/" data-ajax="false">submit</a></li>
+            <li><a href="/user/{{ g.user.id }}" data-ajax="false">account</a></li>
+            {% if g.user.has_role("teacher") %}
+            <li><a href="/teacher" data-ajax="false">teacher</a></li>
+            {% endif %}
+            {% if g.user.has_role("admin") %}
+            <li><a href="/users" data-ajax="false">users</a></li>
+            {% endif %}
+            {% if g.user.has_role("dev") %}
+            <li><a href="/errors" data-ajax="false">errors</a></li>
+            {% endif %}
+            <li><a href="/logout" data-ajax="false">logout</a></li>
+            {% else %}
+            <li><a href="/login" data-ajax="false">login</a></li>
+            <li><a href="/reset" data-ajax="false">reset password</a></li>
+            <li><a href="/register" data-ajax="false">create account</a></li>
+            {% endif %}
+          </ul>
+        </div>
+        {% endblock %}
+        {% block titlebar %}
+        <h1></h1>
+        {% endblock %}
+      </div>
+      <div data-role="main" class="ui-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul>
+          {% for category, message in messages %}
+          <li class="alert alert-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </body>
+</html> 

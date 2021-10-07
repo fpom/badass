@@ -1,27 +1,31 @@
-import collections, time, pathlib, csv, threading, subprocess, \
-    zipfile, json, secrets, os, sys, mimetypes, random, itertools, traceback
+import collections, time, pathlib, csv, threading, zipfile, json, subprocess, \
+    secrets, os, sys, mimetypes, random, itertools, traceback, re, ast
 
+from operator import or_
 from datetime import datetime
-from functools import wraps
+from functools import wraps, reduce
 from pprint import pformat
 
 from flask import Flask, abort, current_app, request, url_for, render_template, \
-    flash, redirect, session, Markup, Response, send_file, jsonify
+    flash, redirect, session, Markup, Response, send_file, jsonify, g
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
+
+from flask_mail import Mail, Message
 
 from pygments import highlight
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.formatters import HtmlFormatter
 
-from .mkpass import salthash, SALT
+from ..db import connect
+from ..mkpass import pwgen
 
 import badass
 
 random.seed()
 
 ##
-##
+## config
 ##
 
 BADASS = str(pathlib.Path(badass.__file__).parent.parent).rstrip("/") + "/"
@@ -37,67 +41,16 @@ REPORT.mkdir(exist_ok=True, parents=True)
 ERROR = pathlib.Path("errors")
 ERROR.mkdir(exist_ok=True, parents=True)
 
+BADASSTPL = pathlib.Path(BADASS) / "www" / "templates"
 TEMPLATES = pathlib.Path("templates")
-if not all ((TEMPLATES / tpl).exists() for tpl in
-            ("index.html", "result.html", "style.css", "teacher.html", "wait.html")) :
-    TEMPLATES = str(pathlib.Path(__file__).parent / "templates")
-TEMPLATES.mkdir(exist_ok=True, parents=True)
-
-##
-## users management
-##
-
-class UserDB (object) :
-    def __init__ (self, path) :
-        self.path = pathlib.Path(path)
-        self.loaded = 0
-        self.reload()
-    @property
-    def groups (self) :
-        self.reload()
-        return self._groups
-    def reload (self) :
-        if self.loaded > self.path.stat().st_mtime :
-            return
-        groups = {}
-        bykey = {}
-        with open(self.path, encoding="utf-8") as infile :
-            self.fields = infile.readline().strip().split(",")
-            self.key = self.fields[0]
-            user = collections.namedtuple("user", self.fields)
-            db = csv.DictReader(infile, self.fields)
-            for item in db :
-                item["group"] = item["group"].replace(" ", "_")
-                row = user(**item)
-                key = getattr(row, self.key)
-                if row.group not in groups :
-                    groups[row.group] = []
-                groups[row.group].append(key)
-                bykey[key] = row
-        self.loaded = time.time()
-        self._groups = groups
-        self._bykey = bykey
-    def __getitem__ (self, key) :
-        self.reload()
-        return self._bykey[key]
-    def auth (self, key, password) :
-        self.reload()
-        row = self[key]
-        if "salt" not in self.fields :
-            attempt, _ = password, salthash(SALT, password)
-        else :
-            _, attempt = password, salthash(row.salt, password)
-        return secrets.compare_digest(attempt, row.password)
-
-students = UserDB("data/students.csv")
-teachers = UserDB("data/teachers.csv")
-
-##
-## waiting animations
-##
+if not all((TEMPLATES / tpl.name).exists() for tpl in
+           itertools.chain(BADASSTPL.glob("*.html"), BADASSTPL.glob("*.css"))) :
+    TEMPLATES = BADASSTPL
 
 ANIMS = [json.load(path.open(encoding="utf-8"))
          for path in pathlib.Path().glob("anim/*.json")] or [None]
+
+DB, CFG, USER, ROLES = connect("data")
 
 ##
 ## flask app starts here
@@ -106,69 +59,78 @@ ANIMS = [json.load(path.open(encoding="utf-8"))
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
 
+for key, val in CFG.items("MAIL") :
+    app.config[key] = val
+
+mail = Mail(app)
+
 ##
-## errors handling
+## authentication
 ##
 
-def errorpath () :
-    for size in itertools.count(start=2) :
-        for i in range(10) :
-            path = ERROR / secrets.token_urlsafe(size)
-            if not path.exists() :
-                return path
+@app.before_request
+def load_user():
+    if "user" in session:
+        g.user = USER(**session["user"])
+    else :
+        g.user = USER()
 
-@app.errorhandler(Exception)
-def handle_exception (err) :
-    if not isinstance(err, HTTPException) :
-        path = errorpath()
-        name = path.name
-        with path.open("w", encoding="utf-8") as out :
-            tb = traceback.TracebackException.from_exception(err, capture_locals=True)
-            out.write("<h5>Traceback</h5>\n")
-            text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
-            out.write(highlight(text, PythonTracebackLexer(), HtmlFormatter()))
-            if session :
-                out.write("<h5>Session</h5><div>")
-                for key, val in session.items() :
-                    out.write(f"<b><code>{key}</code></b><pre>\n")
-                    try :
-                        text = pformat(val)
-                    except :
-                        text = repr(val)
-                    out.write(highlight(text, PythonLexer(), HtmlFormatter()))
-                out.write("</div>")
-        err = InternalServerError(f"The server encountered an internal error"
-                                  f" and was unable to complete your request."
-                                  f" The error has been recorded with identifier"
-                                  f" {name!r} and will be investigated.")
-    return render_template("httperror.html", err=err), err.code
+def check_auth (*l, ROLE=None, ERROR=None, **k) :
+    load_user()
+    if not g.user.authenticated or (ROLE and not g.user.has_role(ROLE)) :
+        if ERROR :
+            abort(ERROR)
+        else :
+            return redirect(url_for(*l, **k))
 
-@app.route("/error", methods=["GET", "POST"])
-def error () :
+def enforce_auth (func) :
+    @wraps(func)
+    def wrapper (*l, **k) :
+        return check_auth("login") or func(*l, **k)
+    return wrapper
+
+def require_login (func) :
+    @wraps(func)
+    def wrapper (*l, **k) :
+        return check_auth(ERROR=401) or func(*l, **k)
+    return wrapper
+
+def require_role (role) :
+    def decorator (func) :
+        @wraps(func)
+        def wrapper (*l, **k) :
+            return check_auth(ROLE=role, ERROR=401) or func(*l, **k)
+        return wrapper
+    return decorator
+
+@app.route("/login", methods=["GET", "POST"])
+def login () :
     if request.method == "GET" :
-        return render_template("error.html", report=None, form={})
+        return render_template("login.html")
     form = dict(request.form)
-    try :
-        who = teachers[form["login"]]
-        if not teachers.auth(who.login, form["password"]) :
-            raise Exception()
-        if who.group != "admin" :
-            raise Exception()
-    except :
-        flash("access denied", "error")
-        return render_template("error.html", report=None, form=form)
-    try :
-        if not form["error"] :
-            raise Exception()
-        path = ERROR / form["error"]
-        report = path.read_text(encoding="utf-8")
-    except :
-        flash(f"invalid error identifier {form.pop('error','')!r}", "error")
-        return render_template("error.html", report=None, form=form)
-    if form.get("delete", None) == "on" :
-        path.unlink()
-        form.pop("error", None)
-    return render_template("error.html", report=Markup(report), form=form)
+    user = USER.from_auth(form.get("email", "").strip().lower(),
+                          form.get("password", ""))
+    if user is None :
+        flash("invalid email or password", "error")
+        return redirect(url_for("login"))
+    g.user = session["user"] = user
+    flash(f"logged in as {user.email}", "info")
+    if g.user.has_role("teacher") :
+        return redirect(url_for("teacher"))
+    elif g.user.has_role("admin") :
+        return redirect(url_for("users"))
+    elif g.user.has_role("dev") :
+        return redirect(url_for("errors"))
+    else :
+        return redirect(url_for("index"))
+
+@app.route("/logout")
+@enforce_auth
+def logout () :
+    session.pop("user", None)
+    g.pop("user", None)
+    flash("logged out", "info")
+    return redirect(url_for("login"))
 
 ##
 ## asynchronous API for long running tasks
@@ -219,6 +181,7 @@ def async_api (wrapped_function) :
 
 @app.route("/status/<task_id>")
 def gettaskstatus (task_id) :
+    check_auth(ERROR=401)
     global tasks
     task = tasks.get(task_id, None)
     if task is None :
@@ -231,6 +194,7 @@ def gettaskstatus (task_id) :
 
 @app.route("/result/<task_id>")
 def gettaskresult (task_id) :
+    check_auth(ERROR=401)
     global tasks
     task = tasks.get(task_id, None)
     if task is None :
@@ -267,28 +231,128 @@ def asset (kind, name) :
         abort(404)
 
 ##
-## students interface
+## user management
+##
+
+@app.route("/register", methods=["GET", "POST"])
+def register () :
+    if request.method == "GET" :
+        return render_template("register.html",
+                               groups=CFG.GROUPS)
+    code = request.form.get("code", None)
+    if not any(code == c for c in CFG.CODES.values()) :
+        flash("invalid course code", "error")
+        abort(401)
+    roles = ROLES.from_code(code)
+    errors = []
+    for field, desc in [("email", "e-mail"),
+                        ("firstname", "first name"),
+                        ("lastname", "last name")] :
+        if not request.form.get(field, None) :
+            errors.append(f"{desc} is required")
+    if not request.form.get("studentid", None) and not roles :
+        errors.append("student number is required")
+    if request.form.get("group", None) not in CFG.GROUPS and not roles :
+        errors.append("invalid group")
+    if errors :
+        for msg in errors :
+            flash(msg, "error")
+        return render_template("register.html",
+                               groups=CFG.GROUPS)
+    password = pwgen()
+    if USER.add(email=request.form["email"],
+                firstname=request.form["firstname"],
+                lastname=request.form["lastname"],
+                password=password,
+                group=request.form.get("group", ""),
+                roles=roles,
+                studentid=request.form.get("studentid", "")) :
+        flash(f"your password has been emailed to {request.form['email']}", "info")
+        mail.send(Message(subject="Welcome to badass",
+                          recipients=[request.form["email"]],
+                          body=f"Your password is {password}\n"))
+        return redirect(url_for("index"))
+    else :
+        flash("registration failed: this e-mail may be used already", "error")
+        return redirect(url_for("register"))
+
+@app.route("/reset", methods=["GET", "POST"])
+def reset () :
+    if request.method == "GET" :
+        return render_template("reset.html")
+    code = request.form.get("code", None)
+    if not any(code == c for c in CFG.CODES.values()) :
+        flash("invalid course code", "error")
+        abort(401)
+    if not request.form.get("email", None) :
+        flash("e-mail is required", "error")
+        return render_template("reset.html")
+    password = pwgen()
+    user = USER.from_email(request.form["email"])
+    if not user :
+        flash("password reset failed, this e-mail may be invalid", "error")
+        return redirect(url_for("reset"))
+    if user.update(password=password) :
+        flash(f"your password has been emailed to {request.form['email']}", "info")
+        mail.send(Message(subject="Welcome back to badass",
+                          recipients=[request.form["email"]],
+                          body=f"Your new password is {password}\n"))
+        return redirect(url_for("index"))
+    else :
+        flash("password reset failed", "error")
+        return redirect(url_for("reset"))
+
+@app.route("/users")
+@require_role(ROLES.admin)
+def users () :
+    return render_template("users.html",
+                           users=USER.iter_users(),
+                           groups=CFG.GROUPS)
+
+@app.route("/user/<user_id>", methods=["GET", "POST"])
+@require_login
+def user (user_id) :
+    if not (str(g.user.id) == str(user_id) or g.user.has_role("admin")) :
+        abort(401)
+    if request.method == "GET" :
+        return render_template("account.html",
+                               user=USER.from_id(user_id),
+                               groups=CFG.GROUPS,
+                               roles=list(ROLES))
+    user = USER.from_id(user_id)
+    update = {}
+    for key in ("email", "firstname", "lastname", "group", "studentid") :
+        new = request.form.get(key, None)
+        if new and new != user[key] :
+            update[key] = new
+    if g.user.has_role("admin") :
+        newroles = ROLES.from_form(request.form)
+        if set(newroles) != set(user.roles) :
+            update["roles"] = newroles
+    if not update :
+        flash("no account update required", "warning")
+    elif user.update(**update) :
+        flash("account updated", "info")
+    else :
+        flash("could not update account", "error")
+    return redirect(url_for("user", user_id=user_id))
+
+##
+## submission interface
 ##
 
 @app.route("/", methods=["GET", "POST"])
+@enforce_auth
 def index () :
     if request.method == "GET" :
-        # show form if not provided
         return render_template("index.html")
-    # check form content
+    # check form
     errors = []
     form = dict(request.form)
-    try :
-        who = students[form["student"]]
-        if not students.auth(who.login, form.pop("password")) :
-            raise Exception()
-    except :
-        errors.append("invalid login or password")
     if form.pop("consent", None) != "on" :
         errors.append("you must certify your identity")
-    if not request.files.getlist("source") :
-        errors.append("missing source files(s)")
-    if any(not src.filename for src in request.files.getlist("source")) :
+    files = list(request.files.getlist("source"))
+    if not (files and all (src.filename for src in files)) :
         errors.append("missing source files(s)")
     if errors :
         for msg in errors :
@@ -297,23 +361,31 @@ def index () :
     # process validated query
     session["form"] = form
     # build unique dir for submission
-    entry = [form.pop("Course")]
+    course = form.pop("Course")
+    entry = [course]
     while entry[-1] in form :
         entry.append(form.pop(entry[-1]))
+    exo = "/".join(entry[1:])
     now = datetime.now()
-    entry.extend([form.pop("student"),
+    entry.extend([str(g.user.id),
                   now.strftime("%Y-%m-%d"),
                   now.strftime("%H:%M:%S.%f")])
     base = UPLOAD.joinpath(*entry)
     form["base"] = str(base)
-    base /= "src"
-    base.mkdir(parents=True, exist_ok=True)
+    srcpath = base / "src"
+    srcpath.mkdir(parents=True, exist_ok=True)
     # save files
-    for src in request.files.getlist("source") :
-        name = secure_filename(src.filename)
-        path = str(base / name)
-        src.save(path)
+    for src in files :
+        src.save(str(srcpath / secure_filename(src.filename)))
+    # save submission to DB
+    form["subid"] = DB.submissions.insert(user=g.user.id,
+                                          date=now,
+                                          course=course,
+                                          exercise=exo,
+                                          path=str(base))
+    DB.commit()
     # go process the submission
+    flash("your submission has been recorded", "info")
     return redirect(url_for("result"))
 
 _result_icons = {"fail" : "delete",
@@ -321,12 +393,12 @@ _result_icons = {"fail" : "delete",
                  "pass" : "check"}
 
 def check_output (*l, **k) :
-    proc = subprocess.run(*l, **k, capture_output=True)
-    proc.check_returncode()
+    subprocess.run(*l, **k, check=True, capture_output=True)
 
 @app.route("/result")
 @async_api
 def result () :
+    check_auth(ERROR=401)
     form = session["form"]
     script = pathlib.Path(form.pop("path"))
     project = pathlib.Path(form.pop("base"))
@@ -354,13 +426,27 @@ def result () :
     permalink_path = project / "permalink"
     with permalink_path.open("w", encoding="utf-8") as out :
         out.write(permalink)
+    # save result to DB
+    DB.results.insert(user=g.user.id,
+                      date=datetime.now(),
+                      submission=form["subid"],
+                      savedto=str(project),
+                      permalink=str(permalink))
+    DB.commit()
+    # redirect to report
     return redirect(permalink)
 
 @app.route("/report/<name>")
+@enforce_auth
 def report (name) :
     path = REPORT / name
     if path.exists() :
-        return path.read_text(encoding="utf-8")
+        if not path.suffix :
+            return path.read_text(encoding="utf-8")
+        else :
+            return send_file(path.open("rb"),
+                             as_attachment=True,
+                             attachment_filename=path.name)
     else :
         abort(404)
 
@@ -368,38 +454,129 @@ def report (name) :
 ## teachers interface
 ##
 
-@app.route("/teacher", methods=["GET", "POST"])
-def teacher () :
+@app.route('/teacher/', defaults={"path" : None}, methods=["GET", "POST"])
+@app.route("/teacher/<path>", methods=["GET"])
+@enforce_auth
+@require_role(ROLES.teacher)
+def teacher (path) :
+    groups = set()
+    exos = collections.defaultdict(set)
+    for row in DB(DB.users.id == DB.submissions.user).select(DB.users.group,
+                                                             DB.submissions.course,
+                                                             DB.submissions.exercise) :
+        groups.add(row.users.group)
+        exos[row.submissions.course].add(row.submissions.exercise)
     if request.method == "GET" :
-        return render_template("teacher.html")
-    # check form content
-    form = dict(request.form)
-    try :
-        who = teachers[form["login"]]
-        if not teachers.auth(who.login, form.pop("password")) :
-            raise Exception()
-    except :
-        flash("invalid login or password", "error")
-        return redirect(url_for("teacher"))
-    # process validated query
-    form["group"] = request.form.getlist("group")
-    form["exercise"] = request.form.getlist("exercise")
-    session["form"] = form
+        if path :
+            url = url_for("report", name=path)
+            flash(Markup(f'<a href="{url}" data-ajax="false">download report</a>'),
+                  "info")
+        return render_template("teacher.html",
+                               groups={k : v for k, v in CFG.GROUPS.items()
+                                       if k in groups},
+                               exercises=exos)
+    session["groups"] = grp = []
+    session["exos"] = exo = []
+    for key, val in request.form.items() :
+        if val != "on" :
+            continue
+        elif key.startswith("grp-") :
+            grp.append(key[4:])
+        elif key.startswith("exo-") :
+            exo.append(key[4:].replace("-", "/", 1))
     return redirect(url_for("marks"))
 
 @app.route("/marks")
 @async_api
 def marks () :
-    form = session["form"]
-    base = UPLOAD.joinpath(form["Course"])
-    now = datetime.now().strftime("%Y-%m-%d---%H-%M-%S")
-    group = "-".join(sorted(form["group"]))
-    path = UPLOAD / form["login"] / f"{group}---{now}.zip"
+    check_auth(ROLE=ROLES.teacher, ERROR=401)
+    path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
+    while path.exists() :
+        path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
     path.parent.mkdir(exist_ok=True, parents=True)
-    argv = ["python3", "-m", "badass", "report", "-p", path, "-b", base]
-    for exo in form["exercise"] :
-        argv.extend(["-e", exo])
-    for grp in list(form["group"]) :
-        argv.extend(students.groups[grp.replace(" ", "_")])
+    exos = session["exos"]
+    argv = (["python3", "-m", "badass", "report", "-o", path]
+            + ["-d", "data"]
+            + ["-g"] + list(session["groups"])
+            + ["-e"] + list(session["exos"]))
     check_output(argv, env=ENV)
-    return send_file(path.open("rb"), as_attachment=True, attachment_filename=path.name)
+    return redirect(url_for("teacher", path=str(path.name)))
+
+##
+## errors handling
+##
+
+def errorpath () :
+    for size in itertools.count(start=2) :
+        for i in range(10) :
+            path = ERROR / secrets.token_urlsafe(size)
+            if not path.exists() :
+                return path
+
+_tb = re.compile(r"b(['\"])Traceback \(most recent call last\):(.|\\\1|\1\1\1)*(\1)")
+
+def format_tb (txt, out) :
+    unique = {}
+    for match in _tb.finditer(txt) :
+        matched = match.group()
+        unique[matched] = ast.literal_eval(matched)
+    for num, (match, pystr) in enumerate(unique.items(), 1) :
+        txt = txt.replace(match, f"{match[1]}SEE TRACEBACK #{num}{match[1]}")
+    out.write('<div data-role="footer"><h5>TRACEBACK #0</h5></div>\n')
+    out.write(highlight(txt, PythonTracebackLexer(), HtmlFormatter()))
+    for num, (match, pystr) in enumerate(unique.items(), 1) :
+        out.write(f'<div data-role="footer"><h5>TRACEBACK #{num}</h5></div>\n')
+        out.write(highlight(pystr, PythonTracebackLexer(), HtmlFormatter()))
+
+def handle_exception (err) :
+    if not isinstance(err, HTTPException) :
+        path = errorpath()
+        name = path.name
+        with path.open("w", encoding="utf-8") as out :
+            tb = traceback.TracebackException.from_exception(err,
+                                                             capture_locals=True)
+            text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
+            format_tb(text, out)
+            if session :
+                out.write('<div data-role="footer"><h5>SESSION</h5></div><div>')
+                for key, val in session.items() :
+                    out.write(f"<b><code>{key}</code></b><pre>\n")
+                    try :
+                        text = pformat(val)
+                    except :
+                        text = repr(val)
+                    out.write(highlight(text, PythonLexer(), HtmlFormatter()))
+                out.write("</div>")
+        err = InternalServerError(f"The server encountered an internal error"
+                                  f" and was unable to complete your request."
+                                  f" The error has been recorded with identifier"
+                                  f" {name!r} and will be investigated.")
+    return render_template("httperror.html", err=err), err.code
+
+if not app.config["DEBUG"] :
+    handle_exception = app.errorhandler(Exception)(handle_exception)
+
+@app.route("/errors")
+@enforce_auth
+@require_role(ROLES.dev)
+def errors () :
+    err = []
+    for path in ERROR.glob("*") :
+        err.append(path.name)
+    return render_template("errors.html", errors=err)
+
+@app.route("/error/<ident>/<action>")
+@enforce_auth
+@require_role(ROLES.dev)
+def error (ident, action) :
+    err = ERROR / ident
+    if not err.exists() :
+        abort(404)
+    elif action == "delete" :
+        err.unlink()
+        return redirect(url_for("errors"))
+    elif action == "show" :
+        txt = err.read_text(encoding="utf-8")
+        return render_template("error.html", report=Markup(txt), error=err.stem)
+    else :
+        abort(404)

@@ -10,7 +10,7 @@ __pycache__
 /build
 /dist
 a.out
-/test
-/tmp
+/test*
+/tmp*
 .python-version
 /badass/lang/tslib.so

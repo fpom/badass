@@ -1,0 +1,13 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}Login{% endblock %}</h1>
+{% endblock %}
+{% block content %}
+        <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('login') }}" data-ajax="false">
+          <label for="email">Email</label>
+          <input type="text" name="email">
+          <label for="password">Password</label>
+          <input type="password" name="password">
+          <input type="submit" value="Submit">
+        </form>
+{% endblock %}

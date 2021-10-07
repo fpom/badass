@@ -35,8 +35,7 @@ def main (argv=None) :
             mod = importlib.import_module(f".{package}.cli", "badass")
             assert callable(mod.main)
             assert callable(mod.add_arguments)
-        except Exception as err :
-            # print(f"{path.name} raised {err.__class__.__name__}: {err}")
+        except (ImportError, ModuleNotFoundError, AssertionError) :
             continue
         sub = cmd.add_parser(package, help=mod.main.__doc__)
         mod.add_arguments(sub)
