@@ -394,7 +394,7 @@ _result_icons = {"fail" : "delete",
 
 def check_output (*l, **k) :
     proc = subprocess.run(*l, **k, check=True, capture_output=True)
-    with open("out.log", "w") as out :
+    with open("out.log", "wb") as out :
         out.write(proc.stdout)
         out.write(proc.stderr)
 
