@@ -1,4 +1,4 @@
-import sys, tempfile, io
+import sys, tempfile, io, re
 
 from functools import reduce
 from operator import or_
@@ -123,7 +123,9 @@ class Report (object) :
             self.wb.save(tmp.name)
             tmp.seek(0)
             return tmp.read()
+    _sheetname = re.compile("-*[^a-z0-9-]+-*", re.I)
     def xlsx_new_ws (self, name) :
+        name = self._sheetname.sub("-", name)
         self.ws = self.wb.create_sheet(name)
         self.headers = ["student", "name", "group", "score", "best", "date", "report"]
         self.rows = []
