@@ -82,7 +82,8 @@ class DALAL (object) :
         if kind.startswith("reference ") :
             if value.endswith(".id") :
                 return self.get(value)
-            kind = "id"
+            else :
+                return self._cast_id(value)
         elif kind.startswith("list:") :
             return [self._cast(v, kind[5:]) for v in self._split(value)]
         else :
