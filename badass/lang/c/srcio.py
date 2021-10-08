@@ -76,7 +76,8 @@ class Source (object) :
                               capture_output=True,
                               **encoding)
         ast = tree(json.loads(done.stdout))
-        self.ast[_path] = {"clang" : ast, "cnip" : cnip.parse(path).dict()}
+        self.ast[_path] = {"clang" : ast,
+                           "cnip" : cnip.parse(_path).dict()}
         for decl in query("$..*[?kind='FunctionDecl']", ast) :
             if decl.get("isImplicit", False) :
                 continue
