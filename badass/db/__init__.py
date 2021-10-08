@@ -2,7 +2,7 @@ import csv, secrets, configparser, ast
 
 from pydal import DAL, Field
 from sqlite3 import IntegrityError
-from .mkpass import salthash
+from ..mkpass import salthash
 
 class Roles (object) :
     def __init__ (self, cfg, values=["teacher", "admin", "dev"]) :
