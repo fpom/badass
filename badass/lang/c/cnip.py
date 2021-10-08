@@ -24,6 +24,10 @@ class cnip (object) :
             return self.src
     @classmethod
     def parse (cls, path, errors=False) :
+        import os
+        print("PWD", os.getcwd())
+        print("?", path)
+        subprocess.check_call(["tree"])
         stdout = subprocess.check_output(["cnip", path, "--C-dump-AST"],
                                          stderr=subprocess.DEVNULL,
                                          encoding="utf-8",
