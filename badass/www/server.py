@@ -351,6 +351,7 @@ def index () :
     form = dict(request.form)
     if form.pop("consent", None) != "on" :
         errors.append("you must certify your identity")
+    form["debug"] = form.pop("debug", None) == "on"
     files = list(request.files.getlist("source"))
     if not (files and all (src.filename for src in files)) :
         errors.append("missing source files(s)")
@@ -393,7 +394,18 @@ _result_icons = {"fail" : "delete",
                  "pass" : "check"}
 
 def check_output (*l, **k) :
-    subprocess.run(*l, **k, check=True, capture_output=True)
+    logpath = k.pop("log", None)
+    proc = subprocess.run(*l, **k, check=True, capture_output=True)
+    if logpath :
+        with open(logpath, "wb") as out :
+            out.write(b"<h5>STDOUT</h5>\n"
+                      b"<pre>\n")
+            out.write(proc.stdout)
+            out.write(b"</pre>\n"
+                      b"<h5>STDERR</h5>\n"
+                      b"<pre>\n")
+            out.write(proc.stderr)
+            out.write(b"</pre>\n")
 
 @app.route("/result")
 @async_api
@@ -403,10 +415,14 @@ def result () :
     script = pathlib.Path(form.pop("path"))
     project = pathlib.Path(form.pop("base"))
     define = []
+    logpath = None
+    if form.get("debug", False) :
+        logpath = errorpath(".dbg")
+        define.append("--debug")
     for key, val in form.items() :
         define.extend(["-d", f"{key}={val}"])
     check_output(["python3", "-m", "badass", "run", script, project] + define,
-                 env=ENV)
+                 env=ENV, log=logpath)
     with zipfile.ZipFile(project / "report.zip") as zf :
         with zf.open("report.json") as stream :
             report = json.load(stream)
@@ -499,10 +515,10 @@ def marks () :
 ## errors handling
 ##
 
-def errorpath () :
+def errorpath (suffix="") :
     for size in itertools.count(start=2) :
         for i in range(10) :
-            path = ERROR / secrets.token_urlsafe(size)
+            path = (ERROR / secrets.token_urlsafe(size)).with_suffix(suffix)
             if not path.exists() :
                 return path
 
@@ -570,6 +586,6 @@ def error (ident, action) :
         return redirect(url_for("errors"))
     elif action == "show" :
         txt = err.read_text(encoding="utf-8")
-        return render_template("error.html", report=Markup(txt), error=err.stem)
+        return render_template("error.html", report=Markup(txt), error=err.name)
     else :
         abort(404)

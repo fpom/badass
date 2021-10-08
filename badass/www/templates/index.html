@@ -19,7 +19,13 @@
             <li class="identity lang-fr">Je certifie que je suis la personne identifiée ci-dessus et que le travail rendu ci-dessous est le mien.</li>
           </ul>
         </label>
+        {% if g.user.has_role("dev") %}
+        <input type="checkbox" name="consent" checked>
+        <label for="debug">debug</label>
+        <input type="checkbox" name="debug" checked>
+        {% else %}
         <input type="checkbox" name="consent" unchecked>
+        {% endif %}
       </form>
     </div>
 {% endblock %}
