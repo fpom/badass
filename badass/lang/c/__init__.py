@@ -42,9 +42,11 @@ class Language (BaseLanguage) :
             # compile sources
             lflags = set()
             obj_files = []
+            src_files = []
             for path in self.source  :
                 if not path.match("*.c") :
                     continue
+                src_files.append(path)
                 base = "-".join(path.parts)
                 out = f"log/build/{base}.stdout"
                 err = f"log/build/{base}.stderr"
@@ -53,9 +55,11 @@ class Language (BaseLanguage) :
                 obj_files.append(str(obj))
                 cf, lf = getopt([self.dir / "src" / path], "linux", "gcc")
                 lflags.update(lf)
+                # see https://airbus-seclab.github.io/c-compiler-security/gcc_compilation.html
                 gcc = (f"gcc -c"
+                       f" -O2"
+                       f" -Wall -Wpedantic -Wextra"
                        f" -g -fno-inline -fno-omit-frame-pointer -std=c11"
-                       f" -Wall -Wpedantic"
                        f" {' '.join(cf)}"
                        f" {path}"
                        f" -o {obj}")
@@ -80,6 +84,7 @@ class Language (BaseLanguage) :
             # run program
             if trace == "drmem" :
                 trace = (f"drmemory -quiet -logdir log/memchk"
+                         f" -src_whitelist {','.join(str(s) for s in src_files)}"
                          " -callstack_srcfile_prefix $(pwd) --")
             elif trace == "strace" :
                 trace = f"strace -r -ff -xx -v -o log/strace/log"

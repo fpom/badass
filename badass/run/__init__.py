@@ -282,8 +282,10 @@ class Run (_AllTest) :
     def __enter__ (self) :
         super().__enter__()
         self.log_path = self.test.repo.new("log/run/run.log")
-        self.log = self.log_path.open("w", **encoding)
         return self
+    @property
+    def log (self) :
+        return self.log_path.open("a", **encoding)
     def __exit__ (self, exc_type, exc_val, exc_tb) :
         self.terminate("end of test")
         self_checks, self.checks = self.checks, []

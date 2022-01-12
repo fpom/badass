@@ -71,6 +71,7 @@ setup(name="not-so-badass",
                         "colorama",
                         "parsedatetime",
                         "chardet",
+                        "tree-sitter",
                         "matplotlib"],
       package_data={"badass" : data},
       entry_points={"console_scripts": ["badass=badass.__main__:main"]})
