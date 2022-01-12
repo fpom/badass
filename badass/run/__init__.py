@@ -260,7 +260,7 @@ _diag2status = {"info" : PASS,
                 "error" : FAIL}
 
 class Run (_AllTest) :
-    def __init__ (self, test, stdin=None, eol=True, timeout=None, **options) :
+    def __init__ (self, test, stdin=None, eol=True, timeout=None, env={}, **options) :
         if stdin :
             text = f"build and execute program with input `{mdesc(stdin)}`"
         else :
@@ -269,6 +269,7 @@ class Run (_AllTest) :
         self.timeout = timeout or CONFIG.timeout
         self.stdin = stdin
         self.eol = eol
+        self.env = dict(env)
         self._exit_code = None
         self._signal = None
         self._stop = None
@@ -421,6 +422,10 @@ class Run (_AllTest) :
         if self._stop is not None :
             self.test.repo.add(self._stop)
         self._jail = uuid.uuid4().hex
+        env = {var : os.environ[var]
+               for var in ("PATH", "TERM", "LC_ALL")
+               if var in os.environ}
+        env.update(self.env)
         child = pexpect.spawn("firejail",
                               ["--quiet", "--allow-debuggers", "--private=.",
                                f"--name={self._jail}",
@@ -430,9 +435,7 @@ class Run (_AllTest) :
                               echo=False,
                               encoding=encoding.encoding,
                               codec_errors=encoding.errors,
-                              env={var : os.environ[var]
-                                   for var in ("PATH", "TERM", "LC_ALL")
-                                   if var in os.environ})
+                              env=env)
         child.logfile_read = self.stdout_log.open("w", **encoding)
         if self.stdin is not None :
             if self.eol :
