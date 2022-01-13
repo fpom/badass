@@ -10,6 +10,7 @@ from flask import Flask, abort, current_app, request, url_for, render_template, 
     flash, redirect, session, Markup, Response, send_file, jsonify, g
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from flask_mail import Mail, Message
 
@@ -58,6 +59,7 @@ DB, CFG, USER, ROLES = connect("data")
 
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 for key, val in CFG.items("MAIL") :
     app.config[key] = val
