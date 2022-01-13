@@ -313,9 +313,9 @@ class Run (_AllTest) :
             return
         text = str(text)
         if repl :
-            msg = f"program prints {mdesc(repl)}"
+            msg = f"{mdesc(repl)}"
         else :
-            msg = f"program prints `{mdesc(text)}`"
+            msg = f"`{mdesc(text)}`"
         try :
             self.log.write(f"expect: {text!r}\n")
             self.process.expect(text)
@@ -338,9 +338,9 @@ class Run (_AllTest) :
             return
         text = str(text)
         if repl :
-            msg = f"program prints {mdesc(repl)}"
+            msg = f"{mdesc(repl)}"
         else :
-            msg = f"program prints `{mdesc(text)}`"
+            msg = f"`{mdesc(text)}`"
         try :
             self.log.write(f"send: `{mdesc(text)}`\n")
             if eol :
