@@ -123,6 +123,8 @@ class cfgtree (dict) :
             self[k] = self.__class__()
     def __getitem__ (self, key) :
         return super().__getitem__(str(key).upper())
+    def get (self, key, default=None) :
+        return super().get(str(key).upper(), default)
     def __setitem__ (self, key, val) :
         return super().__setitem__(str(key).upper(), val)
     def __getattr__ (self, name) :

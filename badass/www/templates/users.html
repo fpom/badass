@@ -26,7 +26,8 @@
           <td class="lastname">{{ user.lastname }}</td>
           <td class="email"><a href="mailto:{{ user.email }}">{{ user.email }}</a></td>
           {% if user.group %}
-          <td class="group">{{ user.group }}: {{ groups[user.group] }}</td>
+          <td class="group">{{ user.group }}:
+            {{ groups.get(user.group, "BAD GROUP") }}</td>
           {% else %}
           <td class="group"></td>
           {% endif %}
