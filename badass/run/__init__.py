@@ -308,41 +308,49 @@ class Run (_AllTest) :
                         test.add(PASS if status else FAIL, text, details, auto=True)
         self.checks.extend(self_checks)
         return super().__exit__(exc_type, exc_val, exc_tb)
-    def get (self, text) :
+    def get (self, text, repl=None) :
         if self.terminated :
             return
         text = str(text)
+        if repl :
+            msg = f"program prints {mdesc(repl)}"
+        else :
+            msg = f"program prints `{mdesc(text)}`"
         try :
             self.log.write(f"expect: {text!r}\n")
             self.process.expect(text)
             self.log.write(f"got: {self.process.match.group()!r}\n")
-            self.add(PASS, f"program prints `{mdesc(text)}`")
+            self.add(PASS, f"program prints {msg}")
         except EOF :
             self.log.write("error: end of file\n")
-            self.add(FAIL, f"program prints `{mdesc(text)}`: got end-of-file")
+            self.add(FAIL, f"program prints {msg}: got end-of-file")
             self.terminate("end of stdout")
         except TIMEOUT :
             self.log.write("error: timeout\n")
-            self.add(FAIL, f"program prints `{mdesc(text)}`: got timeout")
+            self.add(FAIL, f"program prints {msg}: got timeout")
             self.terminate("timeout")
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
-            self.add(FAIL, f"program prints `{mdesc(text)}`: got internal error")
+            self.add(FAIL, f"program prints {msg}: got internal error")
             self.terminate("error")
-    def put (self, text, eol=True) :
+    def put (self, text, eol=True, repl=None) :
         if self.terminated :
             return
         text = str(text)
+        if repl :
+            msg = f"program prints {mdesc(repl)}"
+        else :
+            msg = f"program prints `{mdesc(text)}`"
         try :
             self.log.write(f"send: `{mdesc(text)}`\n")
             if eol :
                 self.process.sendline(text)
             else :
                 self.process.send(text)
-            self.add(PASS, f"program reads `{mdesc(text)}`")
+            self.add(PASS, f"program reads {msg}")
         except Exception as err :
             self.log.write(f"error: {err.__class__.__name__}: {repr(str(err))}\n")
-            self.add(FAIL, f"program reads `{mdesc(text)}`: got internal error")
+            self.add(FAIL, f"program reads {msg}: got internal error")
             self.terminate("error")
     @property
     def terminated (self) :
