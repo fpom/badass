@@ -80,7 +80,9 @@ class Language (BaseLanguage) :
             self.log.append(["link", "a.out", gcc,
                              tree(stdout=out, stderr=err, exit_code=ret)])
             # run program
-            if trace == "drmem" :
+            if trace is None :
+                trace = ""
+            elif trace == "drmem" :
                 trace = (f"drmemory -quiet -logdir log/memchk"
                          " -callstack_srcfile_prefix $(pwd) --")
             elif trace == "strace" :
