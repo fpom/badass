@@ -240,6 +240,8 @@ class Test (_Test) :
     def has (self, signature, declarations=None) :
         return self.check(self.lang.decl(signature, declarations),
                           f"code declares `{mdesc(signature)}`")
+    def src (self, name) :
+        return self.lang.source.source(name)
     def query (self, pattern, parser="clang", tree=None) :
         if tree is None :
             if parser is not None :

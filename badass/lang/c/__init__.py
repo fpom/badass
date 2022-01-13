@@ -42,11 +42,9 @@ class Language (BaseLanguage) :
             # compile sources
             lflags = set()
             obj_files = []
-            src_files = []
             for path in self.source  :
                 if not path.match("*.c") :
                     continue
-                src_files.append(path)
                 base = "-".join(path.parts)
                 out = f"log/build/{base}.stdout"
                 err = f"log/build/{base}.stderr"
@@ -63,7 +61,7 @@ class Language (BaseLanguage) :
                        f" {' '.join(cf)}"
                        f" {path}"
                        f" -o {obj}")
-                script.write(f"rm -f {obj}\n"
+                script.write(f"rm -f src/{obj}\n"
                              # put -fdiagnostics-format=json here
                              # to hide it from user-visible logs
                              f"(cd src ; {gcc} -fdiagnostics-format=json)"
@@ -84,7 +82,6 @@ class Language (BaseLanguage) :
             # run program
             if trace == "drmem" :
                 trace = (f"drmemory -quiet -logdir log/memchk"
-                         f" -src_whitelist {','.join(str(s) for s in src_files)}"
                          " -callstack_srcfile_prefix $(pwd) --")
             elif trace == "strace" :
                 trace = f"strace -r -ff -xx -v -o log/strace/log"

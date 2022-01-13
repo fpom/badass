@@ -107,6 +107,16 @@ class Source (object) :
         info = self.obj.get(tidy(signature, declarations), None)
         if info is not None :
             return info[1]
+    def source (self, name) :
+        try :
+            path, ast = self.obj[name]
+        except KeyError :
+            return None
+        path = self.base_dir / path
+        begin = ast.range.begin.offset
+        end = ast.range.end.offset + ast.range.end.tokLen
+        src = path.read_bytes()
+        return src[begin:end].decode("utf-8", errors="replace")
     def discard (self, name) :
         path, ast = self.obj[name]
         self.sig.pop(name, None)
