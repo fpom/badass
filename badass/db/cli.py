@@ -75,8 +75,13 @@ class DALAL (object) :
         for row in rows :
             yield row.as_dict()
     def delete (self, **match) :
-        self(**match).delete()
-        self.db.commit()
+        try :
+            self(**match).delete()
+        except :
+            self.db.rollback()
+            raise
+        else :
+            self.db.commit()
     def cast (self, table, field, value) :
         kind = self.tables[table][field]
         if kind.startswith("reference ") :

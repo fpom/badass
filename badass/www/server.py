@@ -381,12 +381,17 @@ def index () :
     for src in files :
         src.save(str(srcpath / secure_filename(src.filename)))
     # save submission to DB
-    form["subid"] = DB.submissions.insert(user=g.user.id,
-                                          date=now,
-                                          course=course,
-                                          exercise=exo,
-                                          path=str(base))
-    DB.commit()
+    try :
+        form["subid"] = DB.submissions.insert(user=g.user.id,
+                                              date=now,
+                                              course=course,
+                                              exercise=exo,
+                                              path=str(base))
+    except :
+        DB.rollback()
+        raise
+    else :
+        DB.commit()
     # go process the submission
     flash("your submission has been recorded", "info")
     return redirect(url_for("result"))

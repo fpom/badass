@@ -48,9 +48,11 @@ class BaseUser (dict) :
             cls.db.users.insert(password=salthash(salt, password),
                                  salt=salt,
                                  **fields)
+        except :
+            cls.db.rollback()
+            raise
+        else :
             cls.db.commit()
-        except IntegrityError :
-            return
         return cls(**fields)
     @classmethod
     def from_id (cls, user_id) :
@@ -73,8 +75,13 @@ class BaseUser (dict) :
         if fields.pop("password") != salthash(fields.pop("salt"), password) :
             return
         if not fields["activated"] :
-            row.update_record(activated=True)
-            cls.db.commit()
+            try :
+                row.update_record(activated=True)
+            except :
+                cls.db.rollback()
+                raise
+            else :
+                cls.db.commit()
         fields["activated"] = fields["authenticated"] = True
         return cls(**fields)
     @classmethod
@@ -100,8 +107,13 @@ class BaseUser (dict) :
     def has_role (self, role) :
         return role in self.roles
     def delete (self) :
-        done = self.db(self.db.users.email == self.email).delete()
-        self.db.commit()
+        try :
+            done = self.db(self.db.users.email == self.email).delete()
+        except :
+            self.db.rollback()
+            raise
+        else :
+            self.db.commit()
         return done > 0
     def update (self, **fields) :
         assert set(fields) <= {"email", "firstname", "lastname", "password",
@@ -113,8 +125,13 @@ class BaseUser (dict) :
             fields["password"] = salthash(row["salt"], fields["password"])
         if "roles" in fields :
             fields["roles"] = list(sorted(fields["roles"]))
-        row.update_record(**fields)
-        self.db.commit()
+        try :
+            row.update_record(**fields)
+        except :
+            self.db.rollback()
+            raise
+        else :
+            self.db.commit()
         return True
 
 class cfgtree (dict) :
