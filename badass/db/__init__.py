@@ -44,10 +44,9 @@ class BaseUser (dict) :
                   "studentid" : studentid,
                   "activated" : activated}
         salt = secrets.token_hex()
+        passwd = salthash(salt, password)
         try :
-            cls.db.users.insert(password=salthash(salt, password),
-                                 salt=salt,
-                                 **fields)
+            cls.db.users.insert(password=passwd, salt=salt, **fields)
         except :
             cls.db.rollback()
             raise
