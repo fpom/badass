@@ -527,7 +527,12 @@ def errorpath (suffix="") :
         for i in range(10) :
             path = (ERROR / secrets.token_urlsafe(size)).with_suffix(suffix)
             if not path.exists() :
-                return path
+                try :
+                    path.open("x")
+                except :
+                    pass
+                else :
+                    return path
 
 _tb = re.compile(r"b(['\"])Traceback \(most recent call last\):(.|\\\1|\1\1\1)*(\1)")
 
