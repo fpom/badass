@@ -48,6 +48,17 @@
     border-style: solid;
 }
 
+.alert > tt {
+    border-color: #AAA;
+    background-color: #DDD;
+    padding: 3px;
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 5px;
+    font-weight: bold;
+    font-size: larger;
+}
+
 .alert-error {
     border-color: #A00;
     background-color: #FDD;

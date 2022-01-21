@@ -41,6 +41,10 @@
           <label for="roles">roles</label>
           <input type="text" name="roles" readonly="" value="{{ user.roles|join(', ') }}">
           {% endif %}
+          {% if g.user.has_role("admin") %}
+          <label for="password">reset password</label>
+          <input type="checkbox" name="password" id="password">
+          {% endif %}
           <input type="submit" value="Submit">
         </form>
 {% endblock %}

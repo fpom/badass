@@ -268,29 +268,6 @@ def register () :
         flash("registration failed: this e-mail may be used already", "error")
         return redirect(url_for("register"))
 
-@app.route("/reset", methods=["GET", "POST"])
-def reset () :
-    if request.method == "GET" :
-        return render_template("reset.html")
-    code = request.form.get("code", None)
-    if not any(code == c for c in CFG.CODES.values()) :
-        flash("invalid course code", "error")
-        abort(401)
-    if not request.form.get("email", None) :
-        flash("e-mail is required", "error")
-        return render_template("reset.html")
-    password = pwgen()
-    user = USER.from_email(request.form["email"].strip().lower())
-    if not user :
-        flash("password reset failed, this e-mail may be invalid", "error")
-        return redirect(url_for("reset"))
-    if user.update(password=password) :
-        flash(Markup(f"your new password is <tt>{password}</tt>"), "info")
-        return redirect(url_for("index"))
-    else :
-        flash("password reset failed", "error")
-        return redirect(url_for("reset"))
-
 @app.route("/users")
 @require_role(ROLES.admin)
 def users () :
@@ -310,6 +287,8 @@ def user (user_id) :
                                roles=list(ROLES))
     user = USER.from_id(user_id)
     update = {}
+    if g.user.has_role("admin") and request.form.get("password", False) :
+        update["password"] = pwgen()
     for key in ("email", "firstname", "lastname", "group", "studentid") :
         new = request.form.get(key, None)
         if new and new != user[key] :
@@ -321,7 +300,12 @@ def user (user_id) :
     if not update :
         flash("no account update required", "warning")
     elif user.update(**update) :
-        flash("account updated", "info")
+        if "password" in update :
+            flash(Markup(f"account updated,"
+                         f" new password is <tt>{update['password']}</tt>"),
+                  "info")
+        else :
+            flash("account updated", "info")
     else :
         flash("could not update account", "error")
     return redirect(url_for("user", user_id=user_id))
