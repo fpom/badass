@@ -47,6 +47,9 @@ class BaseUser (dict) :
         passwd = salthash(salt, password)
         try :
             cls.db.users.insert(password=passwd, salt=salt, **fields)
+        except IntegrityError :
+            cls.db.rollback()
+            return False
         except :
             cls.db.rollback()
             raise
@@ -178,7 +181,7 @@ def connect (path) :
     # configuration
     config = configparser.ConfigParser()
     config.read(f"{path}/badass.cfg")
-    cfg = cfgtree("MAIL", "CODES", "GROUPS")
+    cfg = cfgtree("CODES", "GROUPS")
     for sec in config :
         for key, val in config[sec].items() :
             try :

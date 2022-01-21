@@ -12,8 +12,6 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException, InternalServerError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from flask_mail import Mail, Message
-
 from pygments import highlight
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.formatters import HtmlFormatter
@@ -60,11 +58,6 @@ DB, CFG, USER, ROLES = connect("data")
 app = Flask("badass-online", template_folder=TEMPLATES)
 app.secret_key = open("data/secret_key", "rb").read()
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-for key, val in CFG.items("MAIL") :
-    app.config[key] = val
-
-mail = Mail(app)
 
 ##
 ## authentication
@@ -244,7 +237,7 @@ def register () :
     code = request.form.get("code", None)
     if not any(code == c for c in CFG.CODES.values()) :
         flash("invalid course code", "error")
-        abort(401)
+        return redirect(url_for("register"))
     roles = ROLES.from_code(code)
     errors = []
     for field, desc in [("email", "e-mail"),
@@ -262,17 +255,14 @@ def register () :
         return render_template("register.html",
                                groups=CFG.GROUPS)
     password = pwgen()
-    if USER.add(email=request.form["email"],
+    if USER.add(email=request.form["email"].strip().lower(),
                 firstname=request.form["firstname"],
                 lastname=request.form["lastname"],
                 password=password,
                 group=request.form.get("group", ""),
                 roles=roles,
                 studentid=request.form.get("studentid", "")) :
-        flash(f"your password has been emailed to {request.form['email']}", "info")
-        mail.send(Message(subject="Welcome to badass",
-                          recipients=[request.form["email"]],
-                          body=f"Your password is {password}\n"))
+        flash(Markup(f"your password is <tt>{password}</tt>"), "info")
         return redirect(url_for("index"))
     else :
         flash("registration failed: this e-mail may be used already", "error")
@@ -290,15 +280,12 @@ def reset () :
         flash("e-mail is required", "error")
         return render_template("reset.html")
     password = pwgen()
-    user = USER.from_email(request.form["email"])
+    user = USER.from_email(request.form["email"].strip().lower())
     if not user :
         flash("password reset failed, this e-mail may be invalid", "error")
         return redirect(url_for("reset"))
     if user.update(password=password) :
-        flash(f"your password has been emailed to {request.form['email']}", "info")
-        mail.send(Message(subject="Welcome back to badass",
-                          recipients=[request.form["email"]],
-                          body=f"Your new password is {password}\n"))
+        flash(Markup(f"your new password is <tt>{password}</tt>"), "info")
         return redirect(url_for("index"))
     else :
         flash("password reset failed", "error")
