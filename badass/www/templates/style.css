@@ -147,5 +147,7 @@ li.lang-fr {
 }
 
 .danger {
-    color: #900;
+    color: #900 !important;
+    background-color: #FDD !important;
+    border-color: #800 !important;
 } 

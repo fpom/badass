@@ -281,9 +281,12 @@ def user (user_id) :
     if not (str(g.user.id) == str(user_id) or g.user.has_role("admin")) :
         abort(401)
     if request.method == "GET" :
+        groups = dict(CFG.GROUPS)
+        if g.user.has_role("admin") :
+            groups[" "] = "<no group>"
         return render_template("account.html",
                                user=USER.from_id(user_id),
-                               groups=CFG.GROUPS,
+                               groups=groups,
                                roles=list(ROLES))
     user = USER.from_id(user_id)
     update = {}
@@ -292,12 +295,18 @@ def user (user_id) :
     for key in ("email", "firstname", "lastname", "group", "studentid") :
         new = request.form.get(key, None)
         if new and new != user[key] :
-            update[key] = new
+            update[key] = new.strip()
     if g.user.has_role("admin") :
         newroles = ROLES.from_form(request.form)
         if set(newroles) != set(user.roles) :
             update["roles"] = newroles
-    if not update :
+    if g.user.has_role("admin") and request.form.get("delete", False) :
+        if user.delete() :
+            flash("account deleted", "info")
+            return redirect(url_for("users"))
+        else :
+            flash("could not delete account", "error")
+    elif not update :
         flash("no account update required", "warning")
     elif user.update(**update) :
         if "password" in update :
@@ -322,8 +331,6 @@ def index () :
     # check form
     errors = []
     form = dict(request.form)
-    if form.pop("consent", None) != "on" :
-        errors.append("you must certify your identity")
     form["debug"] = form.pop("debug", None) == "on"
     files = list(request.files.getlist("source"))
     if not (files and all (src.filename for src in files)) :
@@ -414,11 +421,11 @@ def result () :
     path = REPORT / secrets.token_urlsafe()
     while path.exists() :
         path = REPORT / secrets.token_urlsafe()
-    with path.open("w") as out :
+    with path.open("w", encoding="utf-8", errors="replace") as out :
         out.write(data)
     permalink = url_for("report", name=str(path.name), _external=True)
     permalink_path = project / "permalink"
-    with permalink_path.open("w", encoding="utf-8") as out :
+    with permalink_path.open("w", encoding="utf-8", errors="replace") as out :
         out.write(permalink)
     # redirect to report
     return redirect(permalink)
@@ -471,6 +478,14 @@ def teacher (path) :
             grp.append(key[4:])
         elif key.startswith("exo-") :
             exo.append(key[4:].replace("-", "/", 1))
+    miss = []
+    if not grp :
+        miss.append("groups")
+    if not exo :
+        miss.append("exercises")
+    if miss :
+        flash(f"no {'/'.join(miss)} selected", "error")
+        return redirect(url_for("teacher"))
     return redirect(url_for("marks"))
 
 @app.route("/marks")
@@ -481,7 +496,6 @@ def marks () :
     while path.exists() :
         path = (REPORT / secrets.token_urlsafe()).with_suffix(".zip")
     path.parent.mkdir(exist_ok=True, parents=True)
-    exos = session["exos"]
     argv = (["python3", "-m", "badass", "report", "-o", path]
             + ["-d", "data"]
             + ["-g"] + list(session["groups"])
@@ -524,7 +538,7 @@ def handle_exception (err) :
     if not isinstance(err, HTTPException) :
         path = errorpath()
         name = path.name
-        with path.open("w", encoding="utf-8") as out :
+        with path.open("w", encoding="utf-8", errors="replace") as out :
             tb = traceback.TracebackException.from_exception(err,
                                                              capture_locals=True)
             text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")

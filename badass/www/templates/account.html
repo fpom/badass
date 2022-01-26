@@ -44,6 +44,13 @@
           {% if g.user.has_role("admin") %}
           <label for="password">reset password</label>
           <input type="checkbox" name="password" id="password">
+          <label for="delete" id="delete-label">delete account</label>
+          <input type="checkbox" name="delete" id="delete">
+          <script>
+            $("#delete").on("change", function(e) {
+                $("#delete-label").toggleClass("danger");
+            });
+          </script>
           {% endif %}
           <input type="submit" value="Submit">
         </form>

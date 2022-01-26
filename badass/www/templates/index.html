@@ -8,23 +8,20 @@
 {% block content %}
     <div class="badass">
       <form id="form" method=POST enctype="multipart/form-data" action="{{ url_for('index') }}" data-ajax="false">
-        <label for="consent">
+        <label>
           <ul>
             <li class="identity">logged in as:
               <b>{{ g.user.firstname }} {{ g.user.lastname }}
                 <a href="mailto:{{ g.user.email }}">{{ g.user.email }}</a>
               </b>
             </li>
-            <li class="identity lang-en">I certify that I am the person identified above and that the work submitted below is mine.</li>
-            <li class="identity lang-fr">Je certifie que je suis la personne identifiée ci-dessus et que le travail rendu ci-dessous est le mien.</li>
+            <li class="identity lang-en">By submitting this form, I certify that I am the person identified above and that the work submitted below is mine.</li>
+            <li class="identity lang-fr">En envoyant ce formulaire, je certifie que je suis la personne identifiée ci-dessus et que le travail rendu ci-dessous est le mien.</li>
           </ul>
         </label>
         {% if g.user.has_role("dev") %}
-        <input type="checkbox" name="consent" checked>
         <label for="debug">debug</label>
-        <input type="checkbox" name="debug" checked>
-        {% else %}
-        <input type="checkbox" name="consent" unchecked>
+        <input type="checkbox" name="debug">
         {% endif %}
       </form>
     </div>
