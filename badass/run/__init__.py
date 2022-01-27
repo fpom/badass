@@ -321,8 +321,10 @@ class Run (_AllTest) :
         try :
             self.log.write(f"expect: {text!r}\n")
             self.process.expect(text)
-            self.log.write(f"got: {self.process.match.group()!r}\n")
+            got = self.process.match.group()
+            self.log.write(f"got: {got!r}\n")
             self.add(PASS, f"program prints {msg}")
+            return got
         except EOF :
             self.log.write("error: end of file\n")
             self.add(FAIL, f"program prints {msg}: got end-of-file")

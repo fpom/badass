@@ -1,4 +1,4 @@
-import io, json, sys
+import io, json, sys, shlex
 
 from hadlib import getopt
 
@@ -28,7 +28,7 @@ class Language (BaseLanguage) :
         self.source.discard(name)
     def decl (self, sig, decl=None) :
         return self.source.decl(sig, decl)
-    def make_script (self, trace="drmem") :
+    def make_script (self, trace="drmem", argv=[]) :
         make_path = self.dir / "make.sh"
         with make_path.open("w", **encoding) as script :
             for sub in ("build", "run", "memchk", "strace") :
@@ -91,7 +91,8 @@ class Language (BaseLanguage) :
                 raise ValueError(f"unknown tracing method '{trace}'")
             err = "log/run/run.stderr"
             ret = "log/run/run.status"
-            script.write(f"{trace} ./src/a.out 2> {err}\n"
+            args = shlex.join(str(a) for a in argv)
+            script.write(f"{trace} ./src/a.out {args} 2> {err}\n"
                          f"echo $? > {ret}\n"
                          f"echo\n"
                          f"exit 0")
