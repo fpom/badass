@@ -98,8 +98,9 @@ class Language (BaseLanguage) :
         return make_path, None
     @property
     def exit_code (self) :
-        ret = (self.dir / "log/run/run.status").read_text(**encoding).strip()
+        ret = None
         try :
+            ret = (self.dir / "log/run/run.status").read_text(**encoding).strip()
             return int(ret)
         except :
             return ret
