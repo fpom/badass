@@ -28,7 +28,7 @@ function on_Course_MyCourse () {
 function mk_Course_MyCourse_Test () {
   $("#form").append("<input type='hidden' name='path' value='scripts/cprog/fact.bad'>",
     "<label for='source'>Source file(s)</label>",
-    "<input type='file' name='source' multiple='' accept='.c,.h'>",
+    "<input type='file' name='source' multiple='' accept='.c,.h,.zip'>",
     "<input type='submit' value='Submit'>");
 }
 

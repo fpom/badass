@@ -333,7 +333,7 @@ def index () :
     form = dict(request.form)
     form["debug"] = form.pop("debug", None) == "on"
     files = list(request.files.getlist("source"))
-    if not (files and all (src.filename for src in files)) :
+    if not (files and all(src.filename for src in files)) :
         errors.append("missing source files(s)")
     if errors :
         for msg in errors :
@@ -357,7 +357,16 @@ def index () :
     srcpath.mkdir(parents=True, exist_ok=True)
     # save files
     for src in files :
-        src.save(str(srcpath / secure_filename(src.filename)))
+        if src.filename.lower().endswith(".zip") :
+            zpath = base / secure_filename(src.filename)
+            src.save(str(zpath))
+            try :
+                with zipfile.ZipFile(zpath) as zf :
+                    zf.extractall(path=srcpath)
+            except :
+                flash(f"could not unzip '{src.filename}'", error)
+        else :
+            src.save(str(srcpath / secure_filename(src.filename)))
     # save submission to DB
     try :
         form["subid"] = DB.submissions.insert(user=g.user.id,

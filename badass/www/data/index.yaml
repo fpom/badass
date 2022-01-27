@@ -9,7 +9,7 @@
             - type: file
             - name: source
             - multiple: ""
-            - accept: ".c,.h"
+            - accept: ".c,.h,.zip"
     - chose: exercise
     - Test:
         - title: factorial
