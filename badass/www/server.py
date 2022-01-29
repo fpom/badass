@@ -391,7 +391,7 @@ def check_output (*l, **k) :
     logpath = k.pop("log", None)
     proc = subprocess.run(*l, **k, check=True, capture_output=True)
     if logpath :
-        with open(logpath, "wb") as out :
+        with open(logpath, "wb", encoding="utf-8", errors="replace") as out :
             out.write(b"<h5>STDOUT</h5>\n"
                       b"<pre>\n")
             out.write(proc.stdout)

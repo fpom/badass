@@ -7,6 +7,7 @@ from collections import namedtuple, defaultdict
 from zipfile import ZipFile, ZIP_STORED, ZIP_LZMA
 from io import StringIO
 from csv import DictReader, DictWriter
+from werkzeug.utils import secure_filename
 
 from .. import encoding
 from ..db import connect
@@ -79,7 +80,7 @@ class Report (object) :
             c, e = ex.split("/", 1)
             exos_by_course[c].add(e)
         self.xlsx_init()
-        self.content = []
+        self.content = {}
         for c, exos in sorted(exos_by_course.items()) :
             for e in sorted(exos) :
                 self.xlsx_new_ws(f"{c}-{e}")
@@ -94,27 +95,29 @@ class Report (object) :
                                                DB.submissions.date,
                                                DB.submissions.path) :
                     self.xlsx_add_row(row)
-                    self.content.extend(self._walk(row.submissions.path))
+                    root = Path(row.submissions.path)
+                    name = f"{row.users.lastname} {row.users.firstname}".title()
+                    head = Path(secure_filename(name), *root.parts[1:])
+                    self.content.update(self._walk(root, head, root))
                 self.xlsx_done_ws()
-    def _walk (self, root) :
-        root = Path(root)
-        if root.is_dir() :
-            for path in root.iterdir() :
+    def _walk (self, root, head, sub) :
+        if sub.is_dir() :
+            for path in sub.iterdir() :
                 if path.is_file() :
-                    yield path
+                    yield path, head / path.relative_to(root)
                 elif path.is_dir() :
-                    yield from self._walk(path)
+                    yield from self._walk(root, head, path)
     def save (self, path) :
         with ZipFile(path, "w", compression=ZIP_STORED) as zf :
             zf.writestr("report.xlsx", self.xlsx_data(),
                         compress_type=ZIP_LZMA, compresslevel=9)
-            for cont in self.content :
+            for cont, name in self.content.items() :
                 if cont.suffix == ".zip" :
                     comp = {}
                 else :
                     comp = {"compress_type" : ZIP_LZMA,
                             "compresslevel" : 9}
-                zf.write(cont, cont.relative_to("upload"), **comp)
+                zf.write(cont, name, **comp)
     def xlsx_init (self) :
         self.wb = Workbook()
         self.wb.remove(self.wb.active)
@@ -131,10 +134,13 @@ class Report (object) :
         self.rows = []
         self.best = {}
     def xlsx_add_row (self, row) :
+        name = f"{row.users.lastname.upper()} {row.users.firstname.title()}"
         path = Path(row.submissions.path)
         report = path / "report.zip"
-        name = f"{row.users.lastname.upper()} {row.users.firstname.title()}"
-        if not report.exists() :
+        try :
+            with ZipFile(report) as zf :
+                test_data = io.StringIO(zf.read("report.csv").decode(**encoding))
+        except :
             self.rows.append([row.users.studentid,
                               name,
                               row.users.group,
@@ -142,8 +148,6 @@ class Report (object) :
                               False,
                               row.submissions.date])
             return
-        with ZipFile(report) as zf :
-            test_data = io.StringIO(zf.read("report.csv").decode(**encoding))
         test = Test.from_csv(test_data)
         permalink = (path / "permalink").read_text(**encoding)
         score = 1 - test.value()
