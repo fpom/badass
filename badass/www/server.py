@@ -367,6 +367,12 @@ def index () :
                 flash(f"could not unzip '{src.filename}'", error)
         else :
             src.save(str(srcpath / secure_filename(src.filename)))
+    # save request info
+    info = {"path" : str(base),
+            "user" : dict(g.user),
+            "form" : dict(request.form)}
+    with (base / "request.json").open("w", encoding="utf-8", errors="replace") as out :
+        json.dump(info, out)
     # save submission to DB
     try :
         form["subid"] = DB.submissions.insert(user=g.user.id,
