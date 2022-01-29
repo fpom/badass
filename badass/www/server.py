@@ -554,6 +554,7 @@ def handle_exception (err) :
         path = errorpath()
         name = path.name
         with path.open("w", encoding="utf-8", errors="replace") as out :
+            out.write(f'<p>error recorded on: {datetime.now()}</p>')
             tb = traceback.TracebackException.from_exception(err,
                                                              capture_locals=True)
             text = "".join(tb.format()).replace(BADASS, "").replace(STDLIB, "")
