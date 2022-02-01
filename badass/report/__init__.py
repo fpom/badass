@@ -16,16 +16,22 @@ class Test (object) :
     _TEST = {"pass" : 0,
              "warn" : 1,
              "fail" : 2}
+    _STAT = {v : k for k, v in _TEST.items()}
     NAMES = {}
-    def __init__ (self, val, num=None) :
+    PASS = "PASS"
+    WARN = "WARN"
+    FAIL = "FAIL"
+    def __init__ (self, val, status, num=None, txt="") :
         self.val = val
+        self.status = status
         self.num = num
+        self.txt = txt
         self.children = []
     def value (self) :
         if self.children :
             return sum(c.value() for c in self.children) / len(self.children)
         else :
-            return self.val
+            return self.val / float(max(self._STAT))
     def __iter__ (self) :
         if self.children :
             if self.num :
@@ -36,12 +42,13 @@ class Test (object) :
             yield self.num, self.val
     @classmethod
     def from_csv (cls, stream) :
-        nodes = {"" : cls(0)}
+        root = cls(0, "pass")
+        nodes = {"" : root}
         names = {}
         for row in DictReader(stream) :
             num = row["test"]
             dot = f".{num}"
-            nodes[dot] = cls(cls._TEST[row["status"]], num)
+            nodes[dot] = cls(cls._TEST[row["status"]], row["status"], num, row["text"])
             nodes[dot.rsplit(".", 1)[0]].children.append(nodes[dot])
             if row["auto"] != "True" :
                 names[num] = row["text"]
@@ -53,7 +60,8 @@ class Test (object) :
                     del cls.NAMES[num]
                 else :
                     cls.NAMES[num] = cls._prefix(cls.NAMES[num], names[num])
-        return nodes[""]
+        root.status = cls._STAT[max(c.val for c in root.children)]
+        return root
     @classmethod
     def _prefix (cls, first, *rest) :
         cut = min(len(first), *(len(s) for s in rest))
@@ -66,6 +74,26 @@ class Test (object) :
     @classmethod
     def headers (cls) :
         yield from sorted(cls.NAMES.items())
+    def __str__ (self) :
+        out = io.StringIO()
+        self._print(out)
+        return out.getvalue()
+    def _print (self, out, prefix=None, last=True) :
+        status = getattr(self, self.status.upper(), "")
+        label = f"{status} {self.txt}".rstrip()
+        if prefix is None :
+            out.write(f"{label}\n")
+        elif last :
+            out.write(f"{prefix} └─ {label}\n")
+        else :
+            out.write(f"{prefix} ├─ {label}\n")
+        for child in self.children :
+            if prefix is None :
+                child._print(out, "", child is self.children[-1])
+            elif last :
+                child._print(out, prefix + "    ", child is self.children[-1])
+            else :
+                child._print(out, prefix + " │  ", child is self.children[-1])
 
 class Report (object) :
     def __init__ (self, dbpath, groups, exercises) :
