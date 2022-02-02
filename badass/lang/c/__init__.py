@@ -28,10 +28,10 @@ class Language (BaseLanguage) :
         self.source.discard(name)
     def decl (self, sig, decl=None) :
         return self.source.decl(sig, decl)
-    def make_script (self, trace="drmem", argv=[]) :
+    def make_script (self, trace="drmem", argv=[], pre=[], post=[]) :
         make_path = self.dir / "make.sh"
         with make_path.open("w", **encoding) as script :
-            for sub in ("build", "run", "memchk", "strace") :
+            for sub in ("build", "run", "memchk", "strace", "pre", "post") :
                 script.write(f"mkdir -p log/{sub}\n")
             script.write(f"echo $$ > log/build/make.pid\n"
                          f"env > log/build/make.env\n"
@@ -79,6 +79,13 @@ class Language (BaseLanguage) :
                          f"echo $? > {ret}\n")
             self.log.append(["link", "a.out", gcc,
                              tree(stdout=out, stderr=err, exit_code=ret)])
+            # pre-run
+            for num, cmd in enumerate(pre) :
+                out = f"log/pre/{num}.stdout"
+                err = f"log/pre/{num}.stderr"
+                ret = f"log/pre/{num}.status"
+                script.write(f"{cmd} > {out} 2> {err}\n"
+                             f"echo $? > {ret}\n")
             # run program
             if trace is None :
                 trace = ""
@@ -94,8 +101,16 @@ class Language (BaseLanguage) :
             args = shlex.join(str(a) for a in argv)
             script.write(f"{trace} ./src/a.out {args} 2> {err}\n"
                          f"echo $? > {ret}\n"
-                         f"echo\n"
-                         f"exit 0")
+                         f"echo\n")
+            # post-run
+            for num, cmd in enumerate(post) :
+                out = f"log/post/{num}.stdout"
+                err = f"log/post/{num}.stderr"
+                ret = f"log/post/{num}.status"
+                script.write(f"{cmd} > {out} 2> {err}\n"
+                             f"echo $? > {ret}\n")
+            # exit
+            script.write("exit 0\n")
         return make_path, None
     @property
     def exit_code (self) :

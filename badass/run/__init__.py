@@ -252,6 +252,8 @@ class Test (_Test) :
                 for found in query(expr, tree)]
     def run (self, stdin=None, eol=True, timeout=None, **options) :
         return Run(self, stdin, eol, timeout, **options)
+    def log (self, name) :
+        return (self.test_dir / "log" / name).read_text(**encoding)
 
 ##
 ##
