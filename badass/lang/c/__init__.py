@@ -152,7 +152,8 @@ class Language (BaseLanguage) :
         memchk = {}
         for path in (self.dir / "log/memchk").glob("DrMemory*/results.txt") :
             res = drparse(path)
-            memchk[res.pid] = res
+            if res.pid is not None :
+                memchk[res.pid] = res
         make_pid = int((self.dir / "log/build/make.pid").read_text(**encoding))
         for pid, res in sorted(memchk.items()) :
             for num, info in sorted(res.errors.items()) :
