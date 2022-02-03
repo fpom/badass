@@ -5,7 +5,6 @@ from shutil import copytree, rmtree, copy2 as copy
 from time import sleep
 from zipfile import ZipFile, ZIP_LZMA
 from collections import defaultdict
-from traceback import print_tb as _print_tb
 from tempfile import mkdtemp, mkstemp
 from subprocess import run as subprocess_run, PIPE, STDOUT
 
@@ -16,18 +15,8 @@ from .report import Report
 
 import pexpect
 from pexpect.exceptions import EOF, TIMEOUT
-
-try :
-    from colored_traceback import Colorizer
-    coltb = Colorizer(style="default")
-    def print_tb (exc_type, exc_val, exc_tb) :
-        coltb.colorize_traceback(exc_type, exc_val, exc_tb)
-        coltb.stream.write("\n")
-except ImportError :
-    def print_tb (exc_type, exc_val, exc_tb) :
-        print("Traceback (most recent call last):", file=sys.stderr)
-        _print_tb(exc_tb, file=sys.stderr)
-        print(f"{exc_type.__name__}: {exc_val}", file=sys.stderr)
+import ipdb
+from IPython.core import ultratb
 
 ##
 ##
@@ -39,6 +28,12 @@ ARGS = tree()
 ##
 ##
 ##
+
+def debug (e, c, t) :
+    if CONFIG.debug :
+        vtb = ultratb.VerboseTB(color_scheme="Linux")
+        print("\n".join(vtb.structured_traceback(e, c, t)))
+        ipdb.post_mortem(t)
 
 class Repository (object) :
     def __init__ (self, basedir) :
@@ -172,8 +167,7 @@ class _NestedTest (_Test) :
         if exc_type is None :
             self.status = self._reduce(t.status for t in self.checks)
         else :
-            if CONFIG.debug :
-                print_tb(exc_type, exc_val, exc_tb)
+            debug(exc_type, exc_val, exc_tb)
             self.status = FAIL
         self.test.checks.append(self)
         return True
@@ -219,8 +213,7 @@ class Test (_Test) :
         if exc_type is None :
             self.status = _AllTest._reduce(self, (t.status for t in self.checks))
         else :
-            if CONFIG.debug :
-                print_tb(exc_type, exc_val, exc_tb)
+            debug(exc_type, exc_val, exc_tb)
             self.status = FAIL
         test_json = self.repo.new("test.json")
         with test_json.open("w", **encoding) as out :
