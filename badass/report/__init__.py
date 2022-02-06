@@ -177,7 +177,10 @@ class Report (object) :
                               row.submissions.date])
             return
         test = Test.from_csv(test_data)
-        permalink = (path / "permalink").read_text(**encoding)
+        try :
+            permalink = (path / "permalink").read_text(**encoding)
+        except :
+            permalink = "missing"
         score = 1 - test.value()
         self.best[row.users.studentid] = max(score,
                                              self.best.get(row.users.studentid, 0))
@@ -265,5 +268,8 @@ class Report (object) :
         cell.number_format = "MM-DD HH:MM"
     def _xlsx_format_report (self, cell) :
         if isinstance(cell.value, str) :
-            cell.hyperlink = cell.value
-            cell.value = "link"
+            if cell.value == "missing" :
+                cell.style = "Bad"
+            else :
+                cell.hyperlink = cell.value
+                cell.value = "link"
