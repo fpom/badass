@@ -15,7 +15,10 @@ from .report import Report
 
 import pexpect
 from pexpect.exceptions import EOF, TIMEOUT
-import ipdb
+try :
+    import ipdb
+except :
+    ipdb = None
 from IPython.core import ultratb
 
 ##
@@ -33,7 +36,8 @@ def debug (e, c, t) :
     if CONFIG.debug :
         vtb = ultratb.VerboseTB(color_scheme="Linux")
         print("\n".join(vtb.structured_traceback(e, c, t)))
-        ipdb.post_mortem(t)
+        if ipdb is not None :
+            ipdb.post_mortem(t)
 
 class Repository (object) :
     def __init__ (self, basedir) :
