@@ -63,6 +63,9 @@ class Test (object) :
         root.status = cls._STAT[max(c.val for c in root.children)]
         return root
     @classmethod
+    def reset (cls) :
+        cls.NAMES.clear()
+    @classmethod
     def _prefix (cls, first, *rest) :
         cut = min(len(first), *(len(s) for s in rest))
         while not all(first[:cut] == s[:cut] for s in rest) :
@@ -111,6 +114,7 @@ class Report (object) :
         self.content = {}
         for c, exos in sorted(exos_by_course.items()) :
             for e in sorted(exos) :
+                Test.reset()
                 self.xlsx_new_ws(f"{c}-{e}")
                 dbfilter = ((DB.users.id == DB.submissions.user)
                             & reduce(or_, (DB.users.group == g for g in groups))
