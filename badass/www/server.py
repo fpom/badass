@@ -411,7 +411,10 @@ def check_output (*l, **k) :
 @async_api
 def result () :
     check_auth(ERROR=401)
-    form = session["form"]
+    try :
+        form = session["form"]
+    except KeyError :
+        return redirect(url_for("index"))
     script = pathlib.Path(form.pop("path"))
     project = pathlib.Path(form.pop("base"))
     define = []
