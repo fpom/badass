@@ -1,4 +1,4 @@
-import json, os, ast, sys, uuid
+import json, os, ast, sys, uuid, inspect
 
 from pathlib import Path
 from shutil import copytree, rmtree, copy2 as copy
@@ -248,6 +248,22 @@ class Test (_Test) :
         return [found for expr in expand(pattern, self.lang)
                 for found in query(expr, tree)]
     def run (self, stdin=None, eol=True, timeout=None, **options) :
+        PY = sys.version_info
+        for hook in [options.get("script_pre", []), options.get("script_post", [])] :
+            for i, cmd in enumerate(hook) :
+                if inspect.isfunction(cmd) :
+                    fun, args = cmd, ()
+                elif (isinstance(cmd, (tuple, list))
+                      and cmd and inspect.isfunction(cmd[0])) :
+                    fun, *args = cmd
+                else :
+                    continue
+                path = self.repo.new("hook.py")
+                with path.open("w") as out :
+                    out.write(inspect.getsource(fun))
+                    out.write("\n")
+                    out.write(f"{fun.__name__}({', '.join(repr(a) for a in args)})\n")
+                hook[i] = f"$PYTHON {path.relative_to(self.test_dir)}"
         return Run(self, stdin, eol, timeout, **options)
     def log (self, name) :
         return (self.test_dir / "log" / name).read_text(**encoding)
