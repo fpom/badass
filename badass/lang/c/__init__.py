@@ -51,7 +51,7 @@ class Language (BaseLanguage) :
                 ret = f"log/build/{base}.status"
                 obj = path.with_suffix(".o")
                 obj_files.append(str(obj))
-                cf, lf = getopt([self.dir / "src" / path], "linux", "gcc")
+                cf, lf = getopt([self.dir / "src" / path], "linux", "gcc", inline=True)
                 lflags.update(lf)
                 # see https://airbus-seclab.github.io/c-compiler-security/gcc_compilation.html
                 gcc = (f"gcc -c"
