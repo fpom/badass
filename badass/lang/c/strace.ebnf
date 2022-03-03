@@ -19,6 +19,7 @@ call =
 
 signal =
     "---" sig:name info:struct "---"
+    | "+++" "killed by" sig:name "+++"
     ;
 
 exit =
@@ -30,11 +31,11 @@ atom =
     ;
 
 name =
-    /\w+/
+    /[\w]+/
     ;
 
 expr =
-    value:( t:string | a:array | s:struct | c:call | v:atom )
+    value:{ t:string | a:array | s:struct | c:call | v:atom }+
     [ "..." ]
     [ info:comment ]
     [ op:operator right:expr ]

@@ -2,7 +2,7 @@ from pathlib import Path
 from collections import defaultdict
 from ast import literal_eval
 from datetime import timedelta
-import pickle
+import pickle, re, fnmatch
 
 from ._strace import straceParser
 
@@ -165,12 +165,15 @@ class STrace (object) :
             pid = int(log.suffix.lstrip("."))
             self.trace[pid] = []
             for line in log.open() :
-                self.trace[pid].append(parse(line))
+                try :
+                    self.trace[pid].append(parse(line))
+                except :
+                    self.trace[pid].append(line)
         roots = set(self.trace)
-        self.tree = defaultdict(list)
+        self.tree = defaultdict(set)
         for pid, match in self.match("clone") :
             child = match.ret
-            self.tree[pid].append(child)
+            self.tree[pid].add(child)
             roots.discard(child)
         assert len(roots) == 1, "cannot find root pid"
         self.root = roots.pop()
@@ -215,6 +218,7 @@ class STrace (object) :
             else :
                 yield [found]
                 yield from self._match(sequel, calls)
+            yield from self._match(sequel, calls)
     def _match_sig (self, sig, trace) :
         for idx, evt in enumerate(trace) :
             if evt.kind == "signal" and evt.name == "sig" :
@@ -230,7 +234,16 @@ class STrace (object) :
                 return evt, trace[idx+1:]
         return None, None
     def _match_call (self, name, trace) :
+        if name.startswith("/") and name.endswith("/") :
+            def match (n) :
+                return bool(re.match(f"^({name[1:-1]})$", n))
+        else :
+            names = name.split("|")
+            def match (n) :
+                return any(fnmatch.fnmatch(n, p) for p in names)
         for idx, evt in enumerate(trace) :
-            if evt.kind == "syscall" and evt.name == name :
+            if isinstance(evt, str) and match(evt) :
+                return evt, trace[idx+1:]
+            elif evt.kind == "syscall" and match(evt.name) :
                 return evt, trace[idx+1:]
         return None, None

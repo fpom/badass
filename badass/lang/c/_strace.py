@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 # CAVEAT UTILITOR
 #
@@ -10,15 +9,14 @@
 # Any changes you make to it will be overwritten the next time
 # the file is generated.
 
-
-from __future__ import print_function, division, absolute_import, unicode_literals
+from __future__ import annotations
 
 import sys
 
 from tatsu.buffering import Buffer
 from tatsu.parsing import Parser
-from tatsu.parsing import tatsumasu, leftrec, nomemo
-from tatsu.parsing import leftrec, nomemo  # noqa
+from tatsu.parsing import tatsumasu
+from tatsu.parsing import leftrec, nomemo, isname # noqa
 from tatsu.util import re, generic_main  # noqa
 
 
@@ -37,7 +35,7 @@ class straceBuffer(Buffer):
         namechars='',
         **kwargs
     ):
-        super(straceBuffer, self).__init__(
+        super().__init__(
             text,
             whitespace=whitespace,
             nameguard=nameguard,
@@ -61,12 +59,12 @@ class straceParser(Parser):
         parseinfo=True,
         keywords=None,
         namechars='',
-        buffer_class=straceBuffer,
+        tokenizercls=straceBuffer,
         **kwargs
     ):
         if keywords is None:
             keywords = KEYWORDS
-        super(straceParser, self).__init__(
+        super().__init__(
             whitespace=whitespace,
             nameguard=nameguard,
             comments_re=comments_re,
@@ -76,7 +74,7 @@ class straceParser(Parser):
             parseinfo=parseinfo,
             keywords=keywords,
             namechars=namechars,
-            buffer_class=buffer_class,
+            tokenizercls=tokenizercls,
             **kwargs
         )
 
@@ -92,10 +90,13 @@ class straceParser(Parser):
                     self._signal_()
                 with self._option():
                     self._exit_()
-                self._error('no available options')
+                self._error(
+                    'expecting one of: '
+                    '<syscall> <signal> <exit>'
+                )
         self.name_last_node('event')
         self._check_eof()
-        self.ast._define(
+        self._define(
             ['event', 'time'],
             []
         )
@@ -111,11 +112,14 @@ class straceParser(Parser):
                     self._atom_()
                 with self._option():
                     self._token('?')
-                self._error('no available options')
+                self._error(
+                    'expecting one of: '
+                    "<atom> '?'"
+                )
         self.name_last_node('ret')
         self._pattern('.*')
         self.name_last_node('info')
-        self.ast._define(
+        self._define(
             ['call', 'info', 'ret'],
             []
         )
@@ -137,20 +141,32 @@ class straceParser(Parser):
         self._join(block2, sep2)
         self.name_last_node('args')
         self._token(')')
-        self.ast._define(
+        self._define(
             ['args', 'func'],
             []
         )
 
     @tatsumasu()
     def _signal_(self):  # noqa
-        self._token('---')
-        self._name_()
-        self.name_last_node('sig')
-        self._struct_()
-        self.name_last_node('info')
-        self._token('---')
-        self.ast._define(
+        with self._choice():
+            with self._option():
+                self._token('---')
+                self._name_()
+                self.name_last_node('sig')
+                self._struct_()
+                self.name_last_node('info')
+                self._token('---')
+            with self._option():
+                self._token('+++')
+                self._token('killed by')
+                self._name_()
+                self.name_last_node('sig')
+                self._token('+++')
+            self._error(
+                'expecting one of: '
+                "'---' '+++'"
+            )
+        self._define(
             ['info', 'sig'],
             []
         )
@@ -163,7 +179,7 @@ class straceParser(Parser):
         self._atom_()
         self.name_last_node('status')
         self._token('+++')
-        self.ast._define(
+        self._define(
             ['status'],
             []
         )
@@ -174,11 +190,12 @@ class straceParser(Parser):
 
     @tatsumasu()
     def _name_(self):  # noqa
-        self._pattern('\\w+')
+        self._pattern('[\\w]+')
 
     @tatsumasu()
     def _expr_(self):  # noqa
-        with self._group():
+
+        def block1():
             with self._choice():
                 with self._option():
                     self._string_()
@@ -195,7 +212,11 @@ class straceParser(Parser):
                 with self._option():
                     self._atom_()
                     self.name_last_node('v')
-                self._error('no available options')
+                self._error(
+                    'expecting one of: '
+                    '<string> <array> <struct> <call> <atom>'
+                )
+        self._positive_closure(block1)
         self.name_last_node('value')
         with self._optional():
             self._token('...')
@@ -207,7 +228,7 @@ class straceParser(Parser):
             self.name_last_node('op')
             self._expr_()
             self.name_last_node('right')
-        self.ast._define(
+        self._define(
             ['a', 'c', 'info', 'op', 'right', 's', 't', 'v', 'value'],
             []
         )
@@ -247,7 +268,7 @@ class straceParser(Parser):
         self._join(block1, sep1)
         self.name_last_node('fields')
         self._token('}')
-        self.ast._define(
+        self._define(
             ['fields'],
             []
         )
@@ -269,7 +290,11 @@ class straceParser(Parser):
                 self._token('>=')
             with self._option():
                 self._pattern('[\\^&|+*/<>%-]')
-            self._error('no available options')
+            self._error(
+                'expecting one of: '
+                "'&&' '||' '==' '!=' '<=' '>='"
+                '[\\^&|+*/<>%-]'
+            )
 
 
 class straceSemantics(object):
@@ -322,7 +347,12 @@ def main(filename, start=None, **kwargs):
         with open(filename) as f:
             text = f.read()
     parser = straceParser()
-    return parser.parse(text, rule_name=start, filename=filename, **kwargs)
+    return parser.parse(
+        text,
+        rule_name=start,
+        filename=filename,
+        **kwargs
+    )
 
 
 if __name__ == '__main__':
@@ -330,9 +360,5 @@ if __name__ == '__main__':
     from tatsu.util import asjson
 
     ast = generic_main(main, straceParser, name='strace')
-    print('AST:')
-    print(ast)
-    print()
-    print('JSON:')
-    print(json.dumps(asjson(ast), indent=2))
-    print()
+    data = asjson(ast)
+    print(json.dumps(data, indent=2))
