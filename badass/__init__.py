@@ -7,6 +7,7 @@ from functools import wraps
 from tempfile import mkstemp, mkdtemp
 from json import JSONEncoder as _JSONEncoder
 from pathlib import Path
+from collections import deque
 
 markdown = None
 
@@ -91,3 +92,13 @@ _esc = {c : f"\\{c}" for c in r"\`*_{}[]()#+-.!"}
 
 def mdesc (text) :
     return str(text).translate(_esc)
+
+def chmod_r (path) :
+    q = deque([Path(path)])
+    while q :
+        sub = q.popleft()
+        if sub.is_dir() :
+            sub.chmod(sub.stat().st_mode | 0o750)
+            q.extend(sub.iterdir())
+        else :
+            sub.chmod(sub.stat().st_mode | 0o640)

@@ -9,7 +9,7 @@ from tempfile import mkdtemp, mkstemp
 from subprocess import run as subprocess_run, PIPE, STDOUT
 
 from ..lang import load as load_lang
-from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc
+from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc, chmod_r
 from .queries import query, expand
 from .report import Report
 
@@ -226,6 +226,7 @@ class Test (_Test) :
         test_zip = self.test_dir.with_suffix(".zip")
         self.repo.zip(test_zip)
         if not CONFIG.keep :
+            chmod_r(self.test_dir)
             rmtree(self.test_dir, ignore_errors=True)
         self.TESTS.append(test_zip)
         return True

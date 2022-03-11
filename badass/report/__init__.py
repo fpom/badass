@@ -9,7 +9,7 @@ from io import StringIO
 from csv import DictReader, DictWriter
 from werkzeug.utils import secure_filename
 
-from .. import encoding
+from .. import encoding, chmod_r
 from ..db import connect
 
 class Test (object) :
@@ -130,6 +130,7 @@ class Report (object) :
                     root = Path(row.submissions.path)
                     name = f"{row.users.lastname} {row.users.firstname}".title()
                     head = Path(secure_filename(name), *root.parts[1:])
+                    chmod_r(root)
                     self.content.update(self._walk(root, head, root))
                 self.xlsx_done_ws()
     def _walk (self, root, head, sub) :
