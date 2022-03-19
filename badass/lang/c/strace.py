@@ -242,8 +242,9 @@ class STrace (object) :
             def match (n) :
                 return any(fnmatch.fnmatch(n, p) for p in names)
         for idx, evt in enumerate(trace) :
-            if isinstance(evt, str) and match(evt) :
-                return evt, trace[idx+1:]
+            if isinstance(evt, str) :
+                if match(evt) :
+                    return evt, trace[idx+1:]
             elif evt.kind == "syscall" and match(evt.name) :
                 return evt, trace[idx+1:]
         return None, None

@@ -31,7 +31,7 @@ class Language (BaseLanguage) :
     def make_script (self, trace="drmem", argv=[], pre=[], post=[]) :
         make_path = self.dir / "make.sh"
         with make_path.open("w", **encoding) as script :
-            for sub in ("build", "run", "memchk", "strace", "pre", "post") :
+            for sub in ("build", "run", "memchk", "strace", "pre", "post", "script") :
                 script.write(f"mkdir -p log/{sub}\n")
             script.write(f"echo $$ > log/build/make.pid\n"
                          f"env > log/build/make.env\n"
@@ -94,6 +94,9 @@ class Language (BaseLanguage) :
                          " -callstack_srcfile_prefix $(pwd) --")
             elif trace == "strace" :
                 trace = f"strace -r -ff -xx -v -o log/strace/log"
+            elif trace.startswith("script:") :
+                trace = trace[7:]
+                script.write(f"chmod +x {trace}\n")
             else :
                 raise ValueError(f"unknown tracing method '{trace}'")
             err = "log/run/run.stderr"

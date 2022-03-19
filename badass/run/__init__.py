@@ -248,6 +248,11 @@ class Test (_Test) :
                 tree = self.lang.source.ast
         return [found for expr in expand(pattern, self.lang)
                 for found in query(expr, tree)]
+    def script (self, source) :
+        path = self.repo.new("script")
+        with path.open("w") as out :
+            out.write(source)
+        return path.name
     def run (self, stdin=None, eol=True, timeout=None, **options) :
         PY = sys.version_info
         for hook in [options.get("script_pre", []), options.get("script_post", [])] :
