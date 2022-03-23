@@ -187,22 +187,16 @@ class STrace (object) :
     def match (self, calls, pid=None) :
         if isinstance(calls, str) :
             calls = [calls]
-            aslist = False
+            first = True
         else :
-            aslist = True
+            first = False
         if pid is None :
             for pid, trace in self.trace.items() :
                 for match in self._match(trace, calls) :
-                    if aslist :
-                        yield pid, match
-                    else :
-                        yield pid, match[0]
+                    yield pid, (match[0] if first else match)
         else :
             for match in self._match(self.trace[pid], calls) :
-                if aslist :
-                    yield match
-                else :
-                    yield match[0]
+                yield pid, (match[0] if first else match)
     def _match (self, trace, calls) :
         head, *tail = calls
         if head.startswith("SIG") :
@@ -217,7 +211,6 @@ class STrace (object) :
                     yield [found] + match
             else :
                 yield [found]
-                yield from self._match(sequel, calls)
             yield from self._match(sequel, calls)
     def _match_sig (self, sig, trace) :
         for idx, evt in enumerate(trace) :
