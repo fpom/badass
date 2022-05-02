@@ -3,7 +3,7 @@ import argparse
 def add_arguments (sub) :
     sub.add_argument("-g", "--glob", metavar="GLOB", default=[], action="append",
                      help="files to include in comparison")
-    sub.add_argument("--csv", type=argparse.FileType("w", encoding="utf-8"),
+    sub.add_argument("--csv", type=str, default=None,
                      help="save distance matrix to CSV")
     sub.add_argument("--heatmap", metavar="PATH", type=str, default=None,
                      help="draw a clustered heatmap in PATH")
@@ -25,16 +25,17 @@ def main (args) :
     "compare projects"
     from . import Dist
     import pathlib, tqdm, ast
+    projects = list(args.path)
+    keys = [pathlib.Path(p).name for p in projects]
     if args.load :
-        dist = Dist.read_csv(args.load)
+        dist = Dist.read_csv(keys, args.load)
     else :
-        projects = list(args.path)
-        dist = Dist([pathlib.Path(p).name for p in projects])
-        todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
-        for p, q in tqdm.tqdm(todo) :
-            kp = pathlib.Path(p).name
-            kq = pathlib.Path(q).name
-            dist.add(kp, p, kq, q, *args.glob)
+        dist = Dist(keys)
+    todo = [(p, q) for i, p in enumerate(projects) for q in projects[i+1:]]
+    for p, q in tqdm.tqdm(todo) :
+        kp = pathlib.Path(p).name
+        kq = pathlib.Path(q).name
+        dist.add(kp, p, kq, q, *args.glob)
     if args.csv :
         dist.csv(args.csv)
     if args.heatmap :

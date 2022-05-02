@@ -10,15 +10,40 @@ class Dist (object) :
             self.c = getattr(self, "_c_" + algo)
         except AttributeError :
             raise ValueError(f"unsupported compression '{algo}'")
-        self.size = {}
+        self.size = pd.DataFrame(index=keys, columns=keys)
         self.dist = pd.DataFrame(index=keys, columns=keys)
     @classmethod
-    def read_csv (cls, path, algo="lzma") :
+    def _size_path (cls, path) :
+        p = pathlib.Path(path)
+        return (p.parent / (p.stem + "-size")).with_suffix(".csv")
+    @classmethod
+    def _load_csv (cls, keys, path) :
         data = pd.read_csv(path, index_col=0)
         data.index = data.index.astype(str)
+        data.columns = data.columns.astype(str)
+        if drop := list(set(data.columns) - set(keys)) :
+            data.drop(columns=drop, inplace=True)
+        if drop := list(set(data.index) - set(keys)) :
+            data.drop(index=drop, inplace=True)
+        if more := list(set(keys) - set(data.columns)) :
+            data.loc[:,more] = float("nan")
+        if more := list(set(keys) - set(data.index)) :
+            other = pd.DataFrame(index=more, columns=data.columns)
+            data = data.append(other)
+        return data
+    @classmethod
+    def read_csv (cls, keys, path, algo="lzma") :
         self = cls([], algo)
-        self.dist = data
+        self.dist = self._load_csv(keys, path)
+        self.size = self._load_csv(keys, self._size_path(path))
         return self
+    def csv (self, out) :
+        self.dist.to_csv(out)
+        try :
+            out_name = out.name
+        except :
+            out_name = str(out)
+        self.size.to_csv(self._size_path(out_name))
     def _c_lzma (self, data) :
         if not data :
             return 0
@@ -52,8 +77,6 @@ class Dist (object) :
         else :
             data.append(self._read(path))
         return "".join(data).encode("utf-8", errors="replace")
-    def csv (self, out) :
-        self.dist.to_csv(out)
     def _leaves (self, node) :
         if node.is_leaf() :
             return self.dist.index[node.get_id()]
@@ -150,22 +173,36 @@ class Dist (object) :
             sub.savefig(target, **kw_plt)
             plt.close(sub.fig)
     def add (self, k1, p1, k2, p2, *glob) :
-        d1 = self._load(p1, glob)
-        if k1 in self.size :
-            s1 = self.size[k1]
+        if not (pd.isna(self.size.loc[k1][k1])
+                or pd.isna(self.size.loc[k2][k2])
+                or pd.isna(self.size.loc[k1][k2])
+                or pd.isna(self.size.loc[k2][k1])) :
+            print("skip", k1, k2)
+            return
+        d1 = d2 = None
+        if not pd.isna(self.size.loc[k1][k1]) :
+            s1 = self.size.loc[k1][k1]
         else :
-            s1 = self.size[k1] = self.c(d1)
+            d1 = self._load(p1, glob)
+            s1 = self.size.loc[k1][k1] = self.c(d1)
         if s1 == 0 :
             self.dist.drop(index=k1, columns=k1, inplace=True, errors="ignore")
             return
-        d2 = self._load(p2, glob)
-        if k2 in self.size :
-            s2 = self.size[k2]
+        if not pd.isna(self.size.loc[k2][k2]) :
+            s2 = self.size.loc[k2][k2]
         else :
-            s2 = self.size[k2] = self.c(d2)
+            d2 = self._load(p2, glob)
+            s2 = self.size.loc[k2][k2] = self.c(d2)
         if s2 == 0 :
             self.dist.drop(index=k2, columns=k2, inplace=True, errors="ignore")
             return
-        s3 = self.c(d1 + d2)
+        if not pd.isna(self.size.loc[k1][k2]) :
+            s3 = self.size.loc[k1][k2]
+        else :
+            if d1 is None :
+                d1 = self._load(p1, glob)
+            if d2 is None :
+                d2 = self._load(p2, glob)
+            s3 = self.size.loc[k1][k2] = self.size.loc[k2][k1] = self.c(d1 + d2)
         d = 1 - (s1 + s2 - s3) / max(s1, s2)
         self.dist.loc[k1][k2] = self.dist.loc[k2][k1] = d
