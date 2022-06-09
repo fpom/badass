@@ -12,6 +12,8 @@ class Dist (object) :
             raise ValueError(f"unsupported compression '{algo}'")
         self.size = pd.DataFrame(index=keys, columns=keys)
         self.dist = pd.DataFrame(index=keys, columns=keys)
+    def __len__ (self) :
+        return len(self.dist.index)
     @classmethod
     def _size_path (cls, path) :
         p = pathlib.Path(path)
@@ -177,7 +179,6 @@ class Dist (object) :
                 or pd.isna(self.size.loc[k2][k2])
                 or pd.isna(self.size.loc[k1][k2])
                 or pd.isna(self.size.loc[k2][k1])) :
-            print("skip", k1, k2)
             return
         d1 = d2 = None
         if not pd.isna(self.size.loc[k1][k1]) :

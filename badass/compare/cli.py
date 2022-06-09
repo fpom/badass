@@ -1,4 +1,4 @@
-import argparse
+import argparse, sys
 
 def add_arguments (sub) :
     sub.add_argument("-g", "--glob", metavar="GLOB", default=[], action="append",
@@ -39,6 +39,9 @@ def main (args) :
     if args.csv :
         dist.csv(args.csv)
     if args.heatmap :
+        if (l := len(dist)) < 2 :
+            sys.stderr.write(f"cannot plot heatmap for only {l} projects\n")
+            sys.exit(0)
         options = {}
         for opt in args.hmopt :
             key, val = opt.split("=", 1)

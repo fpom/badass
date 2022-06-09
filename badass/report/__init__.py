@@ -9,7 +9,7 @@ from io import StringIO
 from csv import DictReader, DictWriter
 from werkzeug.utils import secure_filename
 
-from .. import encoding, chmod_r
+from .. import encoding, chmod_r, tree
 from ..db import connect
 
 class Test (object) :
@@ -98,34 +98,86 @@ class Test (object) :
             else :
                 child._print(out, prefix + " │  ", child is self.children[-1])
 
-class Report (object) :
+class _DB (object) :
     def __init__ (self, dbpath, groups, exercises) :
+        self.groups = groups
+        self.DB, self.CFG, _, _ = connect(dbpath)
+        self.exercises = defaultdict(set)
+        for ex in exercises :
+            c, e = ex.split("/", 1)
+            self.exercises[c].add(e)
+    def submissions (self, course, exercise) :
+        dbfilter = ((self.DB.users.id == self.DB.submissions.user)
+                    & reduce(or_, (self.DB.users.group == g for g in self.groups))
+                    & (self.DB.submissions.exercise == exercise)
+                    & (self.DB.submissions.course == course))
+        yield from self.DB(dbfilter).select(self.DB.users.firstname,
+                                            self.DB.users.lastname,
+                                            self.DB.users.studentid,
+                                            self.DB.users.group,
+                                            self.DB.submissions.date,
+                                            self.DB.submissions.path)
+
+class _CSV (object) :
+    tables = {"users" : {"studentid", "firstname", "lastname", "group"},
+	      "submissions" : {"date", "course", "exercise", "path"}}
+    def __init__ (self, csvpath, groups, exercises) :
+        groups = set(groups)
+        self.exercises = defaultdict(set)
+        for ex in exercises :
+            c, e = ex.split("/", 1)
+            self.exercises[c].add(e)
+        self.rows = []
+        c2t = {}
+        for table, cols in self.tables.items() :
+            c2t.update((c, table) for c in cols)
+        with open(csvpath) as infile :
+            for row in DictReader(infile) :
+                root = tree(users=tree(), submissions=tree())
+                for key, val in row.items() :
+                    if "." in key :
+                        table, col = key.split(".", 1)
+                    else :
+                        col = key
+                        table = c2t[key]
+                    root[table][col] = val
+                c, e = root.submissions.course, root.submissions.exercise
+                if exercises :
+                    if c not in self.exercises :
+                        continue
+                    if e not in self.exercises[c] :
+                        continue
+                else :
+                    self.exercises[c].add(e)
+                self.rows.append(root)
+    def submissions (self, course, exercise) :
+        for row in self.rows :
+            if (row.submissions.course == course
+                and row.submissions.exercise == exercise) :
+                yield row
+
+class Report (object) :
+    @classmethod
+    def from_db (cls, dbpath, groups, exercises) :
+        db = _DB(dbpath, groups, exercises)
+        return cls(db)
+    @classmethod
+    def from_csv (cls, csvpath, groups, exercises) :
+        db = _CSV(csvpath, groups, exercises)
+        return cls(db)
+    def __init__ (self, db) :
         # only load if necessary to speedup prog startup
         global Workbook, dataframe_to_rows, PatternFill, Alignment
         from openpyxl import Workbook
         from openpyxl.styles import PatternFill, Alignment
         #
-        DB, CFG, _, _ = connect(dbpath)
-        exos_by_course = defaultdict(set)
-        for ex in exercises :
-            c, e = ex.split("/", 1)
-            exos_by_course[c].add(e)
         self.xlsx_init()
         self.content = {}
-        for c, exos in sorted(exos_by_course.items()) :
+        for c, exos in db.exercises.items() :
             for e in sorted(exos) :
                 Test.reset()
                 self.xlsx_new_ws(f"{c}-{e}")
-                dbfilter = ((DB.users.id == DB.submissions.user)
-                            & reduce(or_, (DB.users.group == g for g in groups))
-                            & (DB.submissions.exercise == e)
-                            & (DB.submissions.course == c))
-                for row in DB(dbfilter).select(DB.users.firstname,
-                                               DB.users.lastname,
-                                               DB.users.studentid,
-                                               DB.users.group,
-                                               DB.submissions.date,
-                                               DB.submissions.path) :
+                for row in db.submissions(c, e) :
                     self.xlsx_add_row(row)
                     root = Path(row.submissions.path)
                     name = f"{row.users.lastname} {row.users.firstname}".title()
