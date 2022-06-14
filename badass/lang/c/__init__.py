@@ -57,7 +57,7 @@ class Language (BaseLanguage) :
                 gcc = (f"gcc -c"
                        f" -O2"
                        f" -Wall -Wpedantic -Wextra"
-                       f" -g -fno-inline -fno-omit-frame-pointer -std=c11"
+                       f" -g -fno-inline -fno-omit-frame-pointer"
                        f" {' '.join(cf)}"
                        f" {path}"
                        f" -o {obj}")
