@@ -1,16 +1,16 @@
-import json, os, ast, sys, uuid, inspect
+import json, os, uuid, inspect
 
 from pathlib import Path
 from shutil import copytree, rmtree, copy2 as copy
 from time import sleep
 from zipfile import ZipFile, ZIP_LZMA
 from collections import defaultdict
-from tempfile import mkdtemp, mkstemp
+from tempfile import mkstemp
 from subprocess import run as subprocess_run, PIPE, STDOUT
 
 from ..lang import load as load_lang
-from .. import tree, new_path, encoding, cached_property, JSONEncoder, mdesc, chmod_r
-from .queries import query, expand
+from .. import tree, encoding, cached_property, JSONEncoder, mdesc, chmod_r
+from .queries import query, expand, TQL
 from .report import Report
 
 import pexpect
@@ -243,18 +243,24 @@ class Test (_Test) :
     def query (self, pattern, parser="clang", tree=None) :
         if tree is None :
             if parser is not None :
+                if parser not in self.lang.PARSERS :
+                    parser = self.lang.PARSERS[0]
                 tree = {k : v[parser] for k, v in self.lang.source.ast.items()}
             else :
                 tree = self.lang.source.ast
-        return [found for expr in expand(pattern, self.lang)
-                for found in query(expr, tree)]
+        patts = expand(pattern, self.lang)
+        return [f for p in patts for f in query(pattern, tree)]
+    @property
+    def tq (self) :
+        if "treesitter" not in self.lang.PARSERS :
+            raise NotImplementedError(f"{self.lang.NAMES[0]} does not support TQL")
+        return TQL([{k : v["treesitter"]} for k, v in self.lang.source.ast.items()])
     def script (self, source) :
         path = self.repo.new("script")
         with path.open("w") as out :
             out.write(source)
         return path.name
     def run (self, stdin=None, eol=True, timeout=None, **options) :
-        PY = sys.version_info
         for hook in [options.get("script_pre", []), options.get("script_post", [])] :
             for i, cmd in enumerate(hook) :
                 if inspect.isfunction(cmd) :

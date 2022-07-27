@@ -1,4 +1,4 @@
-import sys, ast, collections
+import ast, collections
 
 from pathlib import Path
 
@@ -40,7 +40,7 @@ class SourceTree (object) :
     def dump_all (self) :
         for node in self.nodes :
             if node.type not in self._dump_ignore :
-                yield dump(node)
+                yield self.dump(node)
     def dump (self, node=None) :
         if node is None :
             node = self.root

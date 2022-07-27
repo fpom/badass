@@ -6,7 +6,7 @@ from .. import BaseLanguage
 from ... import tree, encoding, cached_property, mdesc
 from .drmem import parse as drparse
 from .strace import STrace
-from .srcio import Source, ASTPrinter
+from .srcio import Source
 
 class Language (BaseLanguage) :
     SUFFIX = ".c"
@@ -15,6 +15,7 @@ class Language (BaseLanguage) :
     MACROS = {"LoopStmt" : ("ForStmt", "WhileStmt", "DoStmt"),
               "CondStmt" : ("IfStmt", "SwitchStmt")}
     IGNORE = {"ISO C does not support the 'm' scanf flag"}
+    PARSERS = ["clang", "cnip"]
     def __init__ (self, test) :
         super().__init__(test)
         self.dir = self.test.test_dir

@@ -1,6 +1,3 @@
-import json, collections
-
-from subprocess import run as subprocess_run, PIPE, STDOUT
 from pathlib import Path
 
 from .. import BaseLanguage, BaseASTPrinter
@@ -95,6 +92,7 @@ class Language (BaseLanguage) :
     MACROS = {"LoopStmt" : ("ForStmt", "WhileStmt"),
               "CondStmt" : ("IfStmt", "SwitchStmt")}
     IGNORE = {}
+    PARSERS = ["treesitter"]
     def __init__ (self, test) :
         super().__init__(test)
         self.log = []
