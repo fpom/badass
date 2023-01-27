@@ -108,6 +108,9 @@ class Dist (object) :
         cg.savefig(path, **kw_plt)
         plt.close(cg.fig)
         # prune outliers
+        if prune == "auto" :
+            d = self.dist.values[np.triu_indices_from(self.dist.values, 1)]
+            prune = d.mean() - d.std()
         tree = to_tree(cg.dendrogram_row.calculated_linkage)
         if prune and tree.dist :
             leaves = set()

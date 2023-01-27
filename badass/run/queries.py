@@ -87,17 +87,16 @@ class TQL (object) :
         return self.m >= set(other)
     def __gt__ (self, other) :
         return self.m > set(other)
-    @classmethod
-    def _match (cls, obj, pat) :
+    def _match (self, obj, pat) :
         if isinstance(pat, _TQL_OP) :
-            return reduce(pat.op, (cls._match(obj, p) for p in pat))
+            return reduce(pat.op, (self._match(obj, p) for p in pat))
         elif isinstance(obj, dict) and isinstance(pat, str) :
             return pat in obj
         elif isinstance(obj, dict) and isinstance(pat, dict) :
-            return all(cls._match(obj.get(k, None), v) for k, v in pat.items())
+            return all(self._match(obj.get(k, None), v) for k, v in pat.items())
         elif isinstance(obj, list) and isinstance(pat, list) :
             return (len(obj) == len(pat)
-                    and all(cls._match(v, p) for v, p in zip(obj, pat)))
+                    and all(self._match(v, p) for v, p in zip(obj, pat)))
         elif isinstance(obj, list) and isinstance(pat, int) :
             return 0 <= pat < len(obj)
         else :

@@ -9,7 +9,6 @@ LIB = "tslib.so"
 from os import chdir
 from pathlib import Path
 from subprocess import check_output, STDOUT
-from tempfile import TemporaryDirectory
 from tree_sitter import Language
 
 target = Path(__file__).parent.absolute() / "badass/lang" / LIB
@@ -28,3 +27,8 @@ print("building", target)
 if target.exists() :
     target.unlink()
 assert Language.build_library(str(target), repos)
+
+target_py = target.parent / "_tslib.py"
+print("writing", target_py)
+with target_py.open("w") as out :
+    out.write(f"LANGS = {list(LANGS)!r}\n")
