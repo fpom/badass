@@ -4,6 +4,15 @@ _line = re.compile(r"^([|\s]*--)\s*(\w+)\s*"
                    r"<(\d+)?:?(\d+)?\.\.(\d+)?:?(\d+)?>"
                    r"\s*`?(.*?)`?$")
 
+for opt in ("--C-dump-AST", "--dump-AST") :
+    if opt in subprocess.check_output(["cnip", "-h"],
+                                      encoding="utf-8",
+                                      errors="replace") :
+        _dump_opt = opt
+        break
+else :
+    raise NotImplementedError("unknown cnip option to dump AST")
+
 class cnip (object) :
     def __init__ (self, **attr) :
         self._attr = dict(attr)
@@ -24,12 +33,14 @@ class cnip (object) :
             return self.src
     @classmethod
     def parse (cls, path, errors=False) :
-        stdout = subprocess.check_output(["cnip", path, "--C-dump-AST"],
+        stdout = subprocess.check_output(["cnip", str(path), _dump_opt],
                                          stderr=subprocess.DEVNULL,
                                          encoding="utf-8",
                                          errors="replace")
         source = open(path).read()
         lines = list(l.rstrip() for l in stdout.splitlines() if l.rstrip())
+        while lines[0] == "CATALOG" :
+            lines.pop(0)
         line = lines.pop(0)
         assert line == "TranslationUnit"
         root = cls(kind=line,

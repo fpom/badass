@@ -1,5 +1,5 @@
 install:
-	pip install . --no-deps --force --use-feature=in-tree-build
+	pip install . --no-deps --force
 	make clean
 
 pip: clean

@@ -1,0 +1,1 @@
+LANGS = ['java', 'c']
