@@ -1,6 +1,6 @@
 version = "0.8"
 
-import os
+import os, io
 import chardet
 
 from functools import wraps
@@ -10,6 +10,29 @@ from pathlib import Path
 from collections import deque
 
 markdown = None
+
+class LabelledTree (object) :
+    def __init__ (self, label, children=[]) :
+        self.label = str(label)
+        self.children = list(children)
+    def _print (self, out, prefix=None, last=True) :
+        if prefix is None :
+            out.write(f"{self.label}\n")
+        elif last :
+            out.write(f"{prefix}└─ {self.label}\n")
+        else :
+            out.write(f"{prefix}├─ {self.label}\n")
+        for child in self.children :
+            if prefix is None :
+                child._print(out, "", child is self.children[-1])
+            elif last :
+                child._print(out, prefix + "   ", child is self.children[-1])
+            else :
+                child._print(out, prefix + "│  ", child is self.children[-1])
+    def __str__ (self) :
+        out = io.StringIO()
+        self._print(out)
+        return out.getvalue().rstrip()
 
 class tree (dict) :
     def __getattr__ (self, key) :

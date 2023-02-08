@@ -249,7 +249,7 @@ class Test (_Test) :
             else :
                 tree = self.lang.source.ast
         patts = expand(pattern, self.lang)
-        return [f for p in patts for f in query(pattern, tree)]
+        return [f for p in patts for f in query(p, tree)]
     @property
     def tq (self) :
         if "treesitter" not in self.lang.PARSERS :
