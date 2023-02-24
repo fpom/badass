@@ -15,7 +15,7 @@ class Language (BaseLanguage) :
     MACROS = {"LoopStmt" : ("ForStmt", "WhileStmt", "DoStmt"),
               "CondStmt" : ("IfStmt", "SwitchStmt")}
     IGNORE = {"ISO C does not support the 'm' scanf flag"}
-    PARSERS = ["clang", "cnip"]
+    PARSERS = ["clang"]
     def __init__ (self, test) :
         super().__init__(test)
         self.dir = self.test.test_dir
