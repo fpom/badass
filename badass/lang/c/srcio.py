@@ -4,7 +4,6 @@ from pathlib import Path
 
 from ...run.queries import query
 from ... import encoding, tree, recode
-from .cnip import cnip
 from .. import BaseASTPrinter
 
 def _cc1 (src) :
@@ -76,8 +75,7 @@ class Source (object) :
                               capture_output=True,
                               **encoding)
         ast = tree(json.loads(done.stdout))
-        self.ast[_path] = {"clang" : ast,
-                           "cnip" : cnip.parse(path).dict()}
+        self.ast[_path] = {"clang" : ast}
         for decl in query("$..*[?kind='FunctionDecl']", ast) :
             if decl.get("isImplicit", False) :
                 continue
@@ -144,14 +142,8 @@ class Source (object) :
         self.parse(path)
 
 class ASTPrinter (BaseASTPrinter) :
-    IMPORTANT = {"clang" : ["kind", "id"],
-                 "cnip" : ["kind"]}
-    GROUP = {"clang" : {},
-             "cnip" : {("start_line", "end_line") : "line: {start_line}:{end_line}",
-                       ("start_char", "end_char") : "char: {start_char}:{end_char}"}}
-    CHILDREN = {"clang" : ["inner"],
-                "cnip" : ["children"]}
-    FORMAT = {"clang" : {"qualType" : "{val!r}"},
-              "cnip" : {"snippet" : "{val!r}"}}
-    IGNORE = {"clang" : [],
-              "cnip" : ["src"]}
+    IMPORTANT = {"clang" : ["kind", "id"]}
+    GROUP = {"clang" : {}}
+    CHILDREN = {"clang" : ["inner"]}
+    FORMAT = {"clang" : {"qualType" : "{val!r}"}}
+    IGNORE = {"clang" : []}
