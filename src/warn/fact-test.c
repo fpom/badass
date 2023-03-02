@@ -11,6 +11,6 @@ int main (int argc, char** argv) {
   printf("Bonjour !\n");
   printf("Quelle est votre nombre ? ");
   scanf("%i", &n);
-  printf("Le rÃ©sultat est : %i\n", fact(n));
+  printf("Le résultat est : %i\n", fact(n));
   printf("Bye bye!\n");
 }

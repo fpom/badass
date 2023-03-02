@@ -9,6 +9,8 @@ from json import JSONEncoder as _JSONEncoder
 from pathlib import Path
 from collections import deque
 
+from colorama import Fore as F
+
 markdown = None
 
 class LabelledTree (object) :
@@ -19,16 +21,16 @@ class LabelledTree (object) :
         if prefix is None :
             out.write(f"{self.label}\n")
         elif last :
-            out.write(f"{prefix}└─ {self.label}\n")
+            out.write(f"{prefix}{F.WHITE}└─{F.RESET} {self.label}\n")
         else :
-            out.write(f"{prefix}├─ {self.label}\n")
+            out.write(f"{prefix}{F.WHITE}├─{F.RESET} {self.label}\n")
         for child in self.children :
             if prefix is None :
                 child._print(out, "", child is self.children[-1])
             elif last :
                 child._print(out, prefix + "   ", child is self.children[-1])
             else :
-                child._print(out, prefix + "│  ", child is self.children[-1])
+                child._print(out, prefix + f"{F.WHITE}│{F.RESET}  ", child is self.children[-1])
     def __str__ (self) :
         out = io.StringIO()
         self._print(out)
