@@ -143,6 +143,14 @@ exactly how each level is nested. If we have used `//` then this could not
 be expressed by a nested dict pattern.
 """
 
+# TODO:
+# * implement __imul__, __ipow__, __itruediv__, and __ifloordiv__ to
+#   perform exact match, eg Q *= {...} matches is Q * {...} and Q has no more
+#   keys than {...}
+# * implement negative matches __invert__, eg Q ~ {...} selects in Q all what
+#   {...} does not match
+# * can we have negative searches, and recursive negative search/match 
+
 import operator
 
 from functools import reduce
@@ -162,6 +170,8 @@ class Q (object) :
         self.m = []
         self.p = dict(pinned)
         self.extend(matches)
+    def __repr__ (self) :
+        return f"<{self.__class__.__name__}:{len(self)}+{len(self.p)}>"
     def append (self, m) :
         self.m.append(m)
     def extend (self, matches) :
@@ -217,6 +227,8 @@ class Q (object) :
                     return [obj[pat]]
             elif isinstance(pat, dict) :
                 return list(Q(obj.values()) * pat)
+            elif pat is ... :
+                return list(obj.values())
             else :
                 raise TypeError(f"invalid child selector {pat!r}")
         elif isinstance(obj, (list, tuple, set)) :

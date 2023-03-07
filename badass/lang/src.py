@@ -1,7 +1,7 @@
 import ast, collections
 
 from pathlib import Path
-from tree_sitter import Language, Parser as TSParser
+from tree_sitter import Language, Parser as TSParser, Node
 
 from colorama import Fore as F
 
@@ -9,66 +9,92 @@ from .queries import Q
 from ._tslib import LANGS
 from .. import tree, LabelledTree, encoding
 
+import badass.lang
+
+#
+# printing AST
+#
+
+def ast2lt (label, node) :
+    if isinstance(node, tree) :
+        if location := "_range" in node :
+            s, e = node._range
+        return LabelledTree(f"{label}: {F.GREEN}{node.kind}{F.RESET}"
+                            + (f" {F.WHITE}[{s}:{e}]{F.RESET}"
+                               if location else ""),
+                            [ast2lt(key, val) for key, val in node.items()
+                             if key not in ("kind", "children")
+                             and not key.startswith("_")]
+                            + [ast2lt(f"{F.YELLOW}#{num}{F.RESET}", val)
+                               for num, val in enumerate(node.get("children", []))])
+    elif isinstance(node, dict) :
+        return LabelledTree(label, [ast2lt(key, val) for key, val in node.items()])
+    elif label == "src" :
+        return LabelledTree(f"{F.BLUE}{node!r}{F.RESET}")
+    elif node is ... :
+        return LabelledTree(f"{F.RED}...{F.RESET}")
+    else :
+        return LabelledTree(f"{label}: {node}")
+
+def ast2str (ast, head="<AST>") :
+    return str(ast2lt(head, ast))
+
+def print_ast (ast, head="<AST>") :
+    print(ast2str(ast, head))
+
+#
+# a single source file
+#
+
 class SourceFile (object) :
-    LANG = None
+    LANG = "c"
     #
     # parsing
     #
     _language = {}
     _tsparser = {}
     @classmethod
-    def parse (cls, src, path=None, clean=True, ellipsis=None, lang=None) :
-        if lang is None :
-            lang = cls.LANG
-        lang, parser = cls._mkparser(lang)
+    def parse (cls, src, path=None, clean=True, ellipsis=None, location=True) :
+        parser = cls._mkparser()
         if isinstance(src, str) :
             src = src.encode(**encoding)
-        return cls(src, path, parser.parse(src), clean, ellipsis, lang=lang)
+        return cls(src, path, parser.parse(src), clean, ellipsis, location)
     @classmethod
-    def parse_file (cls, path, clean=True, ellipsis=None, lang=None) :
+    def parse_file (cls, path, clean=True, ellipsis=None, location=True) :
         src = open(path, "rb").read()
-        return cls.parse(src, path, clean, ellipsis, lang=lang)
+        return cls.parse(src, path, clean, ellipsis, location)
     @classmethod
-    def _mkparser (cls, lang) :
-        if lang is None :
-            lang = cls.LANG
-        if lang is None :
-            raise ValueError("language should be specified")
-        lang = lang.lower()
-        if lang not in LANGS :
-            raise ValueError(f"language {lang} is not supported")
-        if lang not in cls._language :
-            cls._language[lang] = Language(Path(__file__).parent / "tslib.so", lang)
-        if lang not in cls._tsparser :
-            cls._tsparser[lang] = TSParser()
-            cls._tsparser[lang].set_language(cls._language[lang])
-        return lang, cls._tsparser[lang]
+    def _mkparser (cls) :
+        if cls.LANG not in cls._language :
+            sopath = Path(badass.lang.__file__).parent / "tslib.so"
+            cls._language[cls.LANG] = Language(sopath, cls.LANG)
+        if cls.LANG not in cls._tsparser :
+            cls._tsparser[cls.LANG] = TSParser()
+            cls._tsparser[cls.LANG].set_language(cls._language[cls.LANG])
+        return cls._tsparser[cls.LANG]
     #
     # source file
     #
-    def __init__ (self, src, path, tree, clean, ellipsis=None, lang=None) :
-        if lang is None :
-            lang = self.LANG
+    def __init__ (self, src, path, tree,
+                  clean=True, ellipsis=None, location=True) :
         self.src = src
         self.path = path
-        self.tree = tree
-        self.lang = lang
         self.clean = clean
         self.ellipsis = ellipsis
-        self.ast = self._dump_node()
-    _dump_ignore = {"c" : (set("{}()[],;*\"'=\n")
-                           | {"escape_sequence",
-                              "#include", "struct", "typedef",
-                              "return", "if", "else",
-                              "while", "for", "case", "switch", "break"}),
-                    "java" : set("{}()[],;")}
-    _dump_clean = {"c" : {"comment", "ERROR", "MISSING"},
-                    "java" : {"comment", "ERROR", "MISSING"}}
-    def _dump_node (self, node=None) :
-        "dump node a as tree"
-        if node is None :
-            node = self.tree.root_node
+        self.location= location
+        self.ast = self._dump_node(tree.root_node)
+    _dump_ignore = (set("{}()[],;*\"'=\n")
+                    | {"escape_sequence",
+                       "#include", "struct", "typedef",
+                       "return", "if", "else",
+                       "while", "for", "case", "switch", "break"})
+    _dump_clean = {"comment", "ERROR", "MISSING"}
+    def _dump_node (self, node) :
+        "dump TreeSitter node a as tree"
         dump = tree(kind=node.type)
+        if self.location :
+            dump["_range"] = (node.start_byte, node.end_byte)
+            dump["_path"] = self.path
         cursor = node.walk()
         src = True
         if cursor.goto_first_child() :
@@ -78,12 +104,16 @@ class SourceFile (object) :
                 if name is not None :
                     src = False
                     dump[name] = self._dump_node(cursor.node)
+                elif (cursor.node.type == "ERROR"
+                      and (sub := self._dump_node(cursor.node))
+                      and len(sub.get("children", [])) == 1) :
+                    return sub["children"][0]
                 elif (self.ellipsis and cursor.node.type == "ERROR"
                       and self.ellipsis in self[node]) :
                     children.append(...)
                 elif ((ct := cursor.node.type)
-                      and ct not in self._dump_ignore[self.lang]
-                      and not (self.clean and ct in self._dump_clean[self.lang])) :
+                      and ct not in self._dump_ignore
+                      and not (self.clean and ct in self._dump_clean)) :
                     children.append(self._dump_node(cursor.node))
                 if not cursor.goto_next_sibling() :
                     break
@@ -98,84 +128,64 @@ class SourceFile (object) :
                 dump["src"] = txt
         return dump
     def __str__ (self) :
-        return str(self._str(self.path or "<string>", self.ast))
-    @classmethod
-    def _str (cls, label, node) :
-        if isinstance(node, tree) :
-            return LabelledTree(f"{label}: {F.GREEN}{node.kind}{F.RESET}",
-                                [cls._str(key, val) for key, val in node.items()
-                                 if key not in ("kind", "children")]
-                                + [cls._str(f"{F.YELLOW}#{num}{F.RESET}", val)
-                                   for num, val in enumerate(node.get("children", []))])
-        elif isinstance(node, dict) :
-            return LabelledTree(label, [cls._str(key, val) for key, val in node.items()])
-        elif label == "src" :
-            return LabelledTree(f"{F.BLUE}{label}{F.RESET}: {node}")
-        elif node is ... :
-            return LabelledTree(f"{F.RED}...{F.RESET}")
+        return ast2str(self.ast, f"{F.MAGENTA}{self.path or '<STRING>'}{F.RESET}")
+    def _get_range (self, obj) :
+        if isinstance(obj, tuple) :
+            return obj
+        elif isinstance(obj, tree) :
+            return tree._range
+        elif isinstance(obj, Node) :
+            return obj.start_byte, obj.end_byte
         else :
-            return LabelledTree(f"{label}: {node}")
-    def __getitem__ (self, node) :
+            raise ValueError(f"invalid range {obj!r}")
+    def __getitem__ (self, obj) :
         "get source code for a node"
-        return self.src[node.start_byte:node.end_byte].decode(**encoding)
-    def __delitem__ (self, node) :
+        start_byte, end_byte = self._get_range(obj)
+        return self.src[start_byte:end_byte].decode(**encoding)
+    def __delitem__ (self, obj) :
         "delete source code for a node"
-        src = self.src[:node.start_byte] + self.src[node.end_byte:]
+        start_byte, end_byte = self._get_range(obj)
+        src = self.src[:start_byte] + self.src[end_byte:]
         self._update(src)
-    def __setitem__ (self, node, src) :
+    def __setitem__ (self, obj, src) :
         "replace source code for a node"
+        start_byte, end_byte = self._get_range(obj)
         if isinstance(src, str) :
             src = src.encode(**encoding)
-        src = self.src[:node.start_byte] + src + self.src[node.end_byte:]
+        src = self.src[:start_byte] + src + self.src[end_byte:]
         self._update(src)
-    def comment (self, node, start, end="") :
-        chunks = [self.src[:node.start_byte].decode(**encoding)]
-        for line in self[node].splitlines(keepends=True) :
+    def comment (self, obj, start, end="") :
+        start_byte, end_byte = self._get_range(obj)
+        chunks = [self.src[:start_byte].decode(**encoding)]
+        for line in self[start_byte, end_byte].splitlines(keepends=True) :
             head = line.rstrip()
             tail = line[len(head):]
             chunks.append(f"{start}{head}{end}{tail}")
-        chunks.append(self.src[node.end_byte:].decode(**encoding))
+        chunks.append(self.src[end_byte:].decode(**encoding))
         self._update("".join(chunks).encode(**encoding))
     def _update (self, src) :
         if self.path :
             with open(self.path, "w", **encoding) as out :
                 out.write(src.decode(**encoding))
-        tree = self.parse(src, self.path, self.clean, lang=self.lang)
+        tree = self.parse(src, self.path, self.clean, self.ellipsis, self.location)
         self.src = src
-        self.tree = tree.tree
-        self.ast = self._dump_node()
-    #
-    # TreeSitter queries
-    #
-    def tsq (self, query, root=None) :
-        "run a TreeSitter query on a node (or root) and return captured nodes"
-        if root is None :
-            root = self.tree.root_node
-        match = collections.defaultdict(list)
-        seen = set()
-        for node, name in self._language[self.lang].query(query).captures(root) :
-            nsig = (name, node.start_byte, node.end_byte, node.sexp())
-            if nsig not in seen :
-                seen.add(nsig)
-                match[name].append(node)
-        return dict(match)
+        self.ast = tree.ast
 
-def print_ast (ast, head="<AST>") :
-    print(SourceFile._str(head, ast))
+#
+# a collection of source files
+#
 
 class SourceTree (object) :
-    LANG = None
+    LANG = "c"
     GLOB = ["*.c", "*.h"]
-    DECL = {"func" : "(function_definition) @func",
-            "type" : "(type_definition) @type"}
     COMMENT = ["/*", "*/"]
-    def __init__ (self, root, lang=None) :
-        if lang is None :
-            lang = self.LANG
-        self.lang = lang
+    ELLIPSIS = "@"
+    #
+    # content management
+    #
+    def __init__ (self, root) :
         self.root = Path(root)
         self.src = {}
-        self.obj = {}
         todo = [self.root]
         while todo :
             path = todo.pop()
@@ -185,21 +195,15 @@ class SourceTree (object) :
                         todo.append(child)
                     else :
                         self.add_path(child)
+    def __repr__ (self) :
+        return f"<SourceTree {self.root}:{len(self.src)}>"
+    def __str__ (self) :
+        return ast2str({f"{F.MAGENTA}{p}{F.RESET}" : s.ast for p, s in self.src.items()} ,
+                       f"{F.MAGENTA}{self.root}{F.WHITE}/...{F.RESET}")
     def add_path (self, path) :
-        sf = SourceFile.parse_file(path, lang=self.lang)
+        sf = SourceFile.parse_file(path)
         path = str(path.relative_to(self.root))
         self.src[path] = sf
-        for decl, query in self.DECL.items() :
-            handler = getattr(self, f"get_{decl}_decl")
-            for match in sf.tsq(query).get(decl, []) :
-                name, node = handler(sf, match)
-                self.obj[name] = path, node
-    def get_func_decl (self, sf, node) :
-        match = sf.tsq("(_ declarator: (_ declarator: (_) @name))", node)
-        return sf[match["name"][0]], node
-    def get_type_decl (self, sf, node) :
-        match = sf.tsq("(_ (type_identifier) @name)", node)
-        return sf[match["name"][0]], node
     def add_source (self, src, path) :
         if isinstance(src, str) :
             src = src.encode(**encoding)
@@ -207,34 +211,51 @@ class SourceTree (object) :
         with open(path, "wb") as out :
             out.write(src)
         self.add_path(path)
-    def del_decl (self, name) :
-        if name not in self.obj :
-            return
-        path, node = self.obj.pop(name)
-        self.src[path].comment(node, *self.COMMENT)
+    def __getitem__ (self, ast) :
+        return self.src[ast._path][ast]
+    def __setitem__ (self, ast, src) :
+        self.src[ast._path][ast] = src
+    def __delitem__ (self, ast) :
+        del self.src[ast._path][ast]
+    def comment (self, ast) :
+        self.src[ast._path].comment(ast, *self.COMMENT)
+    #
+    # patterns and queries
+    #
+    @classmethod
+    def compile_pre (cls, src) :
+        return src
+    @classmethod
+    def compile_post (cls, ast) :
+        if ast.kind == "translation_unit" :
+            return ast.children[0]
+        else :
+            return ast
+    @classmethod
+    def compile_pattern (cls, pat, ellipsis="...") :
+        txt = cls.compile_pre(pat.replace(ellipsis, cls.ELLIPSIS))
+        src = SourceFile.parse(txt,
+                               location=False,
+                               ellipsis=cls.ELLIPSIS)
+        return cls.compile_post(src.ast)
     A = Q.AND
     O = Q.OR
     @property
     def Q (self) :
         """a query object that matches all the AST in the source tree"""
         return Q([st.ast for st in self.src.values()])
-    def _filter_pattern (self, pat) :
-        return self._filter_pattern_src(pat["children"][0])
-    def _filter_pattern_src (self, pat) :
-        if not isinstance(pat, dict) :
-            return pat
-        for val in pat.values() :
-            if isinstance(val, dict) :
-                self._filter_pattern_src(val)
-            elif isinstance(val, list) :
-                for item in val :
-                    self._filter_pattern_src(item)
-        return pat
-    ELLIPSIS = "@"
-    def has (self, pat, debug=False, ellipsis="...") :
-        src = SourceFile.parse(pat.replace(ellipsis, self.ELLIPSIS),
-                               lang=self.lang, ellipsis=self.ELLIPSIS)
-        ast = self._filter_pattern(src.ast)
-        if debug :
-            print_ast(ast, "<pattern>")
-        return self.Q // ast
+    def match (self, first, *others, debug=0, ellipsis="...") :
+        last = len(others)
+        prev = self.Q
+        for num, pat in enumerate((first,) + others) :
+            if isinstance(pat, str) :
+                pat = self.compile_pattern(pat, ellipsis)
+            if debug >= 1 :
+                print_ast(pat, f"{F.CYAN}<PATTERN #{num}>{F.RESET}")
+            prev = prev // pat
+            if (debug >= 2 and num == last) or debug >= 3 :
+                for n, match in enumerate(prev) :
+                    print_ast(match, f"{F.MAGENTA}<MATCH #{n}>{F.RESET}")
+            elif debug >= 1 :
+                print(f"{F.MAGENTA}<MATCHED {len(prev)}>{F.RESET}")
+        return prev
