@@ -5,42 +5,11 @@ from tree_sitter import Language, Parser as TSParser, Node
 
 from colorama import Fore as F
 
-from .queries import Q
+from .queries import Q, ast2str
 from ._tslib import LANGS
-from .. import tree, LabelledTree, encoding
+from .. import tree, encoding
 
 import badass.lang
-
-#
-# printing AST
-#
-
-def ast2lt (label, node) :
-    if isinstance(node, tree) :
-        if location := "_range" in node :
-            s, e = node._range
-        return LabelledTree(f"{label}: {F.GREEN}{node.kind}{F.RESET}"
-                            + (f" {F.WHITE}[{s}:{e}]{F.RESET}"
-                               if location else ""),
-                            [ast2lt(key, val) for key, val in node.items()
-                             if key not in ("kind", "children")
-                             and not key.startswith("_")]
-                            + [ast2lt(f"{F.YELLOW}#{num}{F.RESET}", val)
-                               for num, val in enumerate(node.get("children", []))])
-    elif isinstance(node, dict) :
-        return LabelledTree(label, [ast2lt(key, val) for key, val in node.items()])
-    elif label == "src" :
-        return LabelledTree(f"{F.BLUE}{node!r}{F.RESET}")
-    elif node is ... :
-        return LabelledTree(f"{F.RED}...{F.RESET}")
-    else :
-        return LabelledTree(f"{label}: {node}")
-
-def ast2str (ast, head="<AST>") :
-    return str(ast2lt(head, ast))
-
-def print_ast (ast, head="<AST>") :
-    print(ast2str(ast, head))
 
 #
 # a single source file
@@ -240,6 +209,7 @@ class SourceTree (object) :
         return cls.compile_post(src.ast)
     A = Q.AND
     O = Q.OR
+    N = Q.NOT
     @property
     def Q (self) :
         """a query object that matches all the AST in the source tree"""

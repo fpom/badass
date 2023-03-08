@@ -143,26 +143,73 @@ exactly how each level is nested. If we have used `//` then this could not
 be expressed by a nested dict pattern.
 """
 
-# TODO:
-# * implement __imul__, __ipow__, __itruediv__, and __ifloordiv__ to
-#   perform exact match, eg Q *= {...} matches is Q * {...} and Q has no more
-#   keys than {...}
-# * implement negative matches __invert__, eg Q ~ {...} selects in Q all what
-#   {...} does not match
-# * can we have negative searches, and recursive negative search/match 
+import operator, sys
 
-import operator
-
-from functools import reduce
+from functools import reduce, partial
 from collections import defaultdict
 from itertools import chain
+ichain = chain.from_iterable
+
+from .. import LabelledTree, tree
+from colorama import Fore as F
+
+#
+# printing AST
+#
+
+def ast2lt (label, node) :
+    if isinstance(node, tree) :
+        if location := "_range" in node :
+            s, e = node._range
+        return LabelledTree(f"{label}: {F.GREEN}{node.kind}{F.RESET}"
+                            + (f" {F.WHITE}[{s}:{e}]{F.RESET}"
+                               if location else ""),
+                            [ast2lt(key, val) for key, val in node.items()
+                             if key not in ("kind", "children")
+                             and not key.startswith("_")]
+                            + [ast2lt(f"{F.YELLOW}#{num}{F.RESET}", val)
+                               for num, val in enumerate(node.get("children", []))])
+    elif isinstance(node, dict) :
+        return LabelledTree(label, [ast2lt(key, val) for key, val in node.items()])
+    elif label == "src" :
+        return LabelledTree(f"{F.BLUE}{node!r}{F.RESET}")
+    elif node is ... :
+        return LabelledTree(f"{F.RED}...{F.RESET}")
+    else :
+        return LabelledTree(f"{label}: {node}")
+
+def ast2str (ast, head="<AST>") :
+    return str(ast2lt(head, ast))
+
+def print_ast (ast, head="<AST>") :
+    print(ast2str(ast, head))
+
+#
+# match
+#
+
+def slice2range (s) :
+    start = 0 if s.start is None else s.start
+    stop = sys.maxsize if s.stop is None else s.stop
+    step = 1 if s.step is None else s.step
+    return range(start, stop, step)
 
 class _QOP (object) :
+    pass
+
+class _BINQOP (_QOP) :
     def __init__ (self, op, patterns) :
         self.op = op
         self.patterns = patterns
-    def __iter__ (self) :
-        return iter(self.patterns)
+    def __call__ (self, obj, match) :
+        return reduce(self.op, (match(obj, p) for p in self.patterns))
+
+class _UNAQOP (_QOP) :
+    def __init__ (self, op, pattern) :
+        self.op = op
+        self.pattern = pattern
+    def __call__ (self, obj, match) :
+        return self.op(match(obj, self.pattern))
 
 class Q (object) :
     "a list of items"
@@ -172,6 +219,12 @@ class Q (object) :
         self.extend(matches)
     def __repr__ (self) :
         return f"<{self.__class__.__name__}:{len(self)}+{len(self.p)}>"
+    def __str__ (self) :
+        t = tree(kind=f"{len(self.m)} matched, {len(self.p)} pinned",
+                 children=self.m)
+        if self.p :
+            t.pinned = self.p
+        return ast2str(t, "<MATCH>")
     def append (self, m) :
         self.m.append(m)
     def extend (self, matches) :
@@ -183,17 +236,54 @@ class Q (object) :
         return bool(self.m)
     def __iter__ (self) :
         return iter(self.m)
+    def __and__ (self, other) :
+        if self.p or other.p :
+            raise NotImplementedError("cannot & queries with pins")
+        right = set(map(id, other))
+        def _keep (obj) :
+            return id(obj) in right
+        return Q(filter(_keep, self))
+    def __or__ (self, other) :
+        if self.p or other.p :
+            raise NotImplementedError("cannot | queries with pins")
+        left = set(map(id, self))
+        def _keep (obj) :
+            return id(obj) in left
+        return Q(chain(self, filter(_keep, other)))
+    def __sub__ (self, other) :
+        if self.p or other.p :
+            raise NotImplementedError("cannot | queries with pins")
+        right = set(map(id, other))
+        def _keep (obj) :
+            return id(obj) not in right
+        return Q(filter(_keep, self))
     def _match (self, obj, pat) :
         if isinstance(pat, _QOP) :
-            return reduce(pat.op, (self._match(obj, p) for p in pat))
-        elif pat in (True, False) :
+            return pat(obj, self._match)
+        elif isinstance(pat, bool) :
             return pat
         elif pat is ... :
             return True
         elif isinstance(obj, dict) and isinstance(pat, str) :
             return pat in obj
         elif isinstance(obj, dict) and isinstance(pat, dict) :
-            return all(self._match(obj.get(k, None), v) for k, v in pat.items())
+            match = all(self._match(obj.get(k, None), v)
+                        for k, v in pat.items() if k is not ...)
+            if not match or ... not in pat :
+                return match
+            ell = pat[...]
+            if ell is None :
+                return len(obj) == len(pat) - 1
+            elif ell is ... :
+                return True
+            elif isinstance(ell, int) :
+                return len(obj) == len(pat) + ell - 1
+            elif isinstance(ell, range) :
+                return len(obj) - len(pat) + 1 in ell
+            elif isinstance(ell, slice) :
+                return len(obj) - len(pat) + 1 in slice2range(ell)
+            else :
+                raise TypeError(f"invalid selector for key '...': {ell!r}")
         elif isinstance(obj, list) and isinstance(pat, list) :
             if ... in pat :
                 idx = pat.index(...)
@@ -203,8 +293,14 @@ class Q (object) :
             else :
                 head, tail = pat, []
             return (all(self._match(o, p) for o, p in zip(obj, head))
-                    and all(self._match(o, p) for o, p in zip(reversed(obj),
-                                                              reversed(tail))))
+                    and all(self._match(o, p)
+                            for o, p in zip(reversed(obj), reversed(tail))))
+        elif isinstance(obj, list) and isinstance(pat, int) :
+            return len(obj) == pat
+        elif isinstance(obj, list) and isinstance(pat, range) :
+            return len(obj) in pat
+        elif isinstance(obj, list) and isinstance(pat, slice) :
+            return len(obj) in slice2range(pat)
         else :
             return obj == pat
     def _pinned (self, op, pat) :
@@ -212,14 +308,14 @@ class Q (object) :
                 if (new := [(m, q) for m, p in old if (q := op(p, pat))])}
     def __mul__ (self, pat) :
         "select the items that match pat"
-        matches = [m for m in self if self._match(m, pat)]
-        pinned = self._pinned(operator.mul, pat)
-        return Q(matches, pinned)
+        return Q(filter(partial(self._match, pat=pat), self),
+                 self._pinned(operator.mul, pat))
     def __pow__ (self, pat) :
         "select the items that either match pat or have a descendant that does"
-        matches = [m for m in self if self._match(m, pat) or Q([m]) // pat]
-        pinned = self._pinned(operator.pow, pat)
-        return Q(matches, pinned)
+        def _pow (obj) :
+            return self._match(obj, pat) or Q([obj]) // pat
+        return Q(filter(_pow, self),
+                 self._pinned(operator.pow, pat))
     def _children (self, obj, pat) :
         if isinstance(obj, dict) :
             if isinstance(pat, str) :
@@ -236,22 +332,22 @@ class Q (object) :
         return []
     def __truediv__ (self, pat) :
         "select items' children that match pat"
-        matches = [c for m in self for c in self._children(m, pat)]
-        pinned = self._pinned(operator.truediv, pat)
-        return Q(matches, pinned)
-    def _iter (self, obj) :
-       if isinstance(obj, (list, set, tuple)) :
-           return obj
-       elif isinstance(obj, dict) :
-           return obj.values()
-       else :
-           return []
+        return Q(ichain(filter(partial(self._match, pat=pat), self)),
+                 self._pinned(operator.truediv, pat))
     def __floordiv__ (self, pat) :
         "select items' descendants that match pat"
-        matches = [c for  m in self for c in
-                   chain(self._children(m, pat), Q(self._iter(m)) // pat)]
-        pinned = self._pinned(operator.floordiv, pat)
-        return Q(matches, pinned)
+        def _child (obj) :
+            def _iter (obj) :
+               if isinstance(obj, (list, set, tuple)) :
+                   return obj
+               elif isinstance(obj, dict) :
+                   return obj.values()
+               else :
+                   return []
+            return chain(self._children(obj, pat),
+                         Q(_iter(obj)) // pat)
+        return Q(ichain(map(_child, self)),
+                 self._pinned(operator.floordiv, pat))
     def __rshift__ (self, key) :
         self.p[key] = [(m, Q([m])) for m in self]
         return self
@@ -260,8 +356,12 @@ class Q (object) :
     @classmethod
     def AND (cls, *patterns) :
         "intersection of patterns"
-        return _QOP(operator.and_, patterns)
+        return _BINQOP(operator.and_, patterns)
     @classmethod
     def OR (cls, *patterns) :
         "union of patterns"
-        return _QOP(operator.or_, patterns)
+        return _BINQOP(operator.or_, patterns)
+    @classmethod
+    def NOT (cls, pattern) :
+        "negation of a pattern"
+        return _UNAQOP(operator.not_, pattern)
