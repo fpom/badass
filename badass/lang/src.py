@@ -1,6 +1,7 @@
-import ast, collections
+import collections
 
 from pathlib import Path
+from collections.abc import Iterable
 from tree_sitter import Language, Parser as TSParser, Node
 
 from colorama import Fore as F
@@ -17,6 +18,12 @@ import badass.lang
 
 class SourceFile (object) :
     LANG = "c"
+    DUMP_IGNORE = (set("{}()[],;*\"'=\n")
+                   | {"escape_sequence",
+                      "#include", "struct", "typedef",
+                      "return", "if", "else",
+                      "while", "for", "case", "switch", "break"})
+    DUMP_CLEAN = {"comment", "ERROR", "MISSING"}
     #
     # parsing
     #
@@ -30,8 +37,8 @@ class SourceFile (object) :
         return cls(src, path, parser.parse(src), clean, ellipsis, location)
     @classmethod
     def parse_file (cls, path, clean=True, ellipsis=None, location=True) :
-        src = open(path, "rb").read()
-        return cls.parse(src, path, clean, ellipsis, location)
+        path = Path(path)
+        return cls.parse(path.read_bytes(), path, clean, ellipsis, location)
     @classmethod
     def _mkparser (cls) :
         if cls.LANG not in cls._language :
@@ -47,17 +54,11 @@ class SourceFile (object) :
     def __init__ (self, src, path, tree,
                   clean=True, ellipsis=None, location=True) :
         self.src = src
-        self.path = path
+        self.path = None if path is None else Path(path)
         self.clean = clean
         self.ellipsis = ellipsis
         self.location= location
         self.ast = self._dump_node(tree.root_node)
-    _dump_ignore = (set("{}()[],;*\"'=\n")
-                    | {"escape_sequence",
-                       "#include", "struct", "typedef",
-                       "return", "if", "else",
-                       "while", "for", "case", "switch", "break"})
-    _dump_clean = {"comment", "ERROR", "MISSING"}
     def _dump_node (self, node) :
         "dump TreeSitter node a as tree"
         dump = tree(kind=node.type)
@@ -81,8 +82,8 @@ class SourceFile (object) :
                       and self.ellipsis in self[node]) :
                     children.append(...)
                 elif ((ct := cursor.node.type)
-                      and ct not in self._dump_ignore
-                      and not (self.clean and ct in self._dump_clean)) :
+                      and ct not in self.DUMP_IGNORE
+                      and not (self.clean and ct in self.DUMP_CLEAN)) :
                     children.append(self._dump_node(cursor.node))
                 if not cursor.goto_next_sibling() :
                     break
@@ -102,7 +103,7 @@ class SourceFile (object) :
         if isinstance(obj, tuple) :
             return obj
         elif isinstance(obj, tree) :
-            return tree._range
+            return obj._range
         elif isinstance(obj, Node) :
             return obj.start_byte, obj.end_byte
         else :
@@ -124,6 +125,7 @@ class SourceFile (object) :
         src = self.src[:start_byte] + src + self.src[end_byte:]
         self._update(src)
     def comment (self, obj, start, end="") :
+        "comment source code for a node"
         start_byte, end_byte = self._get_range(obj)
         chunks = [self.src[:start_byte].decode(**encoding)]
         for line in self[start_byte, end_byte].splitlines(keepends=True) :
@@ -134,11 +136,10 @@ class SourceFile (object) :
         self._update("".join(chunks).encode(**encoding))
     def _update (self, src) :
         if self.path :
-            with open(self.path, "w", **encoding) as out :
-                out.write(src.decode(**encoding))
-        tree = self.parse(src, self.path, self.clean, self.ellipsis, self.location)
+            self.path.write_bytes(src)
+        new = self.parse(src, self.path, self.clean, self.ellipsis, self.location)
         self.src = src
-        self.ast = tree.ast
+        self.ast = new.ast
 
 #
 # a collection of source files
@@ -171,7 +172,6 @@ class SourceTree (object) :
                        f"{F.MAGENTA}{self.root}{F.WHITE}/...{F.RESET}")
     def add_path (self, path) :
         sf = SourceFile.parse_file(path)
-        path = str(path.relative_to(self.root))
         self.src[path] = sf
     def add_source (self, src, path) :
         if isinstance(src, str) :
@@ -181,13 +181,26 @@ class SourceTree (object) :
             out.write(src)
         self.add_path(path)
     def __getitem__ (self, ast) :
-        return self.src[ast._path][ast]
+        if isinstance(ast, Iterable) :
+            return [self.src[a._path][a] for a in ast]
+        else :
+            return self.src[ast._path][ast]
     def __setitem__ (self, ast, src) :
-        self.src[ast._path][ast] = src
+        if isinstance(ast, Iterable) :
+            for a, s in zip(ast, src) :
+                self.src[a._path][a] = s
+        else :
+            self.src[ast._path][ast] = src
     def __delitem__ (self, ast) :
-        del self.src[ast._path][ast]
+        if not isinstance(ast, Iterable) :
+            ast = [ast]
+        for a in ast :
+            del self.src[a._path][a]
     def comment (self, ast) :
-        self.src[ast._path].comment(ast, *self.COMMENT)
+        if not isinstance(ast, Iterable) :
+            ast = [ast]
+        for a in ast :
+            self.src[a._path].comment(a, *self.COMMENT)
     #
     # patterns and queries
     #

@@ -1,146 +1,171 @@
 """Queries on AST for human beings
 
-A Query is basically a list of items, built by simply passing it the items it
+# Query objects
+
+A query is basically a list of items, built by simply passing it the items it
 should hold:
 
 >>> q = Q([
-    {'kind': 'declaration',
-     'type': {'kind': 'primitive_type', 'src': 'int'},
-     'declarator': {'kind': 'init_declarator',
-       'declarator': {'kind': 'identifier', 'src': 'a'},
-       'value': {'kind': 'number_literal', 'src': '1'}}},
-    {'kind': 'declaration',
-     'type': {'kind': 'primitive_type', 'src': 'int'},
-     'declarator': {'kind': 'init_declarator',
-       'declarator': {'kind': 'identifier', 'src': 'b'},
-       'value': {'kind': 'number_literal', 'src': '2'}}},
-    {'kind': 'declaration',
-     'type': {'kind': 'primitive_type', 'src': 'char'},
-     'declarator': {'kind': 'init_declarator',
-        'declarator': {'kind': 'pointer_declarator',
-           'declarator': {'kind': 'identifier', 'src': 's'}},
-        'value': {'kind': 'string_literal', 'src': '"hello"'}}},
-    {'kind': 'expression_statement',
-     'children': [{'kind': 'call_expression',
-       'function': {'kind': 'identifier', 'src': 'printf'},
-       'arguments': {'kind': 'argument_list',
-         'children': [{'kind': 'string_literal', 'src': '"%s / %i / %i"'},
-           {'kind': 'identifier', 'src': 's'},
-           {'kind': 'identifier', 'src': 'a'},
-           {'kind': 'identifier', 'src': 'b'}]}}]}])
+... {"a" : "A",
+...  "b" : "B",
+...  "c" : {"x" : "X"}},
+... {"a" : "Aaaa",
+...  "b" : "B"},
+... {"a" : "A",
+...  "c" : {"x" : "X"}},
+... {"b" : "B",
+...  "c" : {"x" : "Z"}}])
+>>> q
+<Q:4>
 
 It supports some methods of lists: `append`, `entend`, `__len__`, `__bool__`,
-and `__iter__`.
+`__iter__`, and `__getitem__`. It also supports `&`, `|`, and `-` sets
+operations.
+
+Note that `Q` objets are lists, i.e. they allow for repeated items, which makes
+it possible to count the number of matches. And `&` and `|` implement sets
+operation based on the ids of items (and not structural equality), which also
+allows to count the number of matches without counting twice exactly the same.
+
+Items in `Q` objects may be any Python objects, but mostly we are interested
+in `dict` that implement AST, and `list` that may be found inside. Other types
+may be collected while traversing AST.
+
+# Selection
 
 Items may be selected with operator `q * pattern`. Trivial patterns are `True`
-and `False` that select all, resp. no, items. If `pattern` is a string, it
-selects all the dicts who have it as a key:
+and `False` that select all, resp. no, items. `...` is also a trivial pattern
+matches anything but `None`. It as other uses as shown below.
 
->>> list(q * "type")
-[{'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'int'},
-  'declarator': {'kind': 'init_declarator',
-   'declarator': {'kind': 'identifier', 'src': 'a'},
-   'value': {'kind': 'number_literal', 'src': '1'}}},
- {'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'int'},
-  'declarator': {'kind': 'init_declarator',
-   'declarator': {'kind': 'identifier', 'src': 'b'},
-   'value': {'kind': 'number_literal', 'src': '2'}}},
- {'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'char'},
-  'declarator': {'kind': 'init_declarator',
-   'declarator': {'kind': 'pointer_declarator',
-    'declarator': {'kind': 'identifier', 'src': 's'}},
-   'value': {'kind': 'string_literal', 'src': '"hello"'}}}]
+## Matching `dict` values
+
+If `pattern` is a string, it selects all the dicts who have it as a key:
+
+>>> q * "a"
+<Q:3>
+>>> list(q * "a")
+[{'a': 'A', 'b': 'B', 'c': {'x': 'X'}},
+ {'a': 'Aaaa', 'b': 'B'},
+ {'a': 'A', 'c': {'x': 'X'}}]
 
 If `pattern` is a dict, it selects all the dicts that have the same key/val
 as `pattern`:
 
->>> list(q * {"kind" : "expression_statement"})
-[{'kind': 'expression_statement',
-  'children': [{'kind': 'call_expression',
-    'function': {'kind': 'identifier', 'src': 'printf'},
-    'arguments': {'kind': 'argument_list',
-     'children': [{'kind': 'string_literal', 'src': '"%s / %i / %i"'},
-      {'kind': 'identifier', 'src': 's'},
-      {'kind': 'identifier', 'src': 'a'},
-      {'kind': 'identifier', 'src': 'b'}]}}]}]
+>>> list(q * {"a" : ..., "b" : "B"})
+[{'a': 'A', 'b': 'B', 'c': {'x': 'X'}},
+ {'a': 'Aaaa', 'b': 'B'}]
 
-Otherwise, `pattern` selects all the items that are equal to it.
+As shown here, `...` acts as a wildcard to match any `dict` with a key `"a"`.
+`...` may be used also as a key to specify what the `dict` is allowed to
+contain on its other keys, in particular the number of other keys:
+
+>>> list(q * {"a" : ... , "b" : "B", ... : 0})
+[{'a': 'Aaaa', 'b': 'B'}]
+>>> list(q * {"a" : ... , "b" : "B", ... : 1})
+[{'a': 'A', 'b': 'B', 'c': {'x': 'X'}}]
+>>> list(q * {"a" : ... , "b" : "B", ... : range(2)})
+[{'a': 'A', 'b': 'B', 'c': {'x': 'X'}},
+ {'a': 'Aaaa', 'b': 'B'}]
+
+The value specified with key `...` can be:
+ * an `int` to match exactly this number of other keys
+ * a `range` to match any number of other keys within the range
+ * a `slice` to specify a `range` without an upper bound 
+
+## Matching lists
+
+Items within a `Q` object may be lists also, in which case, they can be matched
+with:
+ * an `int`, a `range` or a `slice` to match wrt their length
+ * another list to match their contents
+
+>>> l = [[0], [0, 1], [0, 2], [0, 1, 0], [0, 1, 2, 0],
+...      [1], [1, 2], [1, 2, 3]]
+>>> list(Q(l) * 3)  # 3 items
+[[0, 1, 0],
+ [1, 2, 3]]
+>>> list(Q(l) * range(2,4))  # 2 to 3 items
+[[0, 1],
+ [0, 2],
+ [0, 1, 0],
+ [1, 2],
+ [1, 2, 3]]
+>>> list(Q(l) * [0, True])  # two items, the first one being 0
+[[0, 1],
+ [0, 2]]
+>>> list(Q(l) * [0, ..., 0]) # first and last being 0
+[[0, 1, 0],
+ [0, 1, 2, 0]]
+
+## Matching other values
+
+Other values are matched either with a trivial pattern or just compared using
+equality. For instance above, we matched the ints in lists by comparing them
+to either other ints or `...`.
+
+# Recursive matching
 
 Operator `**` is the recursive version of `*`: it selects either the items in
 the query that match `pattern` or those that contain a sub-items that does.
 
->>> list(q ** {"kind" : "string_literal"})
-[{'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'char'},
-  'declarator': {'kind': 'init_declarator',
-   'declarator': {'kind': 'pointer_declarator',
-    'declarator': {'kind': 'identifier', 'src': 's'}},
-   'value': {'kind': 'string_literal', 'src': '"hello"'}}},
- {'kind': 'expression_statement',
-  'children': [{'kind': 'call_expression',
-    'function': {'kind': 'identifier', 'src': 'printf'},
-    'arguments': {'kind': 'argument_list',
-     'children': [{'kind': 'string_literal', 'src': '"%s / %i / %i"'},
-      {'kind': 'identifier', 'src': 's'},
-      {'kind': 'identifier', 'src': 'a'},
-      {'kind': 'identifier', 'src': 'b'}]}}]}]
+>>> list(q ** {"x" : ...}) 
+[{'a': 'A', 'b': 'B', 'c': {'x': 'X'}},
+ {'a': 'A', 'c': {'x': 'X'}},
+ {'b': 'B', 'c': {'x': 'Z'}}]
 
-Additionally, `Q.AND` and `Q.OR` allow to compose patterns to be used for a
-selection with `*` or `**`.
+Additionally, `Q.AND`, `Q.OR` and `Q.NOT` allow to compose patterns to be
+used for a selection with `*` or `**`.
 
-Items can be also descended into: operator `/` will descend into each item
-that matches a pattern:
+# AST traversal
 
->>> list(q / "type")
-[{'kind': 'primitive_type', 'src': 'int'},
- {'kind': 'primitive_type', 'src': 'int'},
- {'kind': 'primitive_type', 'src': 'char'}]
+`dict` values can be traversed on:
+ * a key: returns the associated value
+ * `...`: returns all the values
+ * a pattern suitable for `*`: returns all the values matching the pattern
 
-(Note that the result is a list of matches, not a set, so it allows to count.)
-And `//` the recursive version of `/`:
+>>> list(q / "c")
+[{'x': 'X'},
+ {'x': 'X'},
+ {'x': 'Z'}]
+>>> list(q / ...)
+['A', 'B', {'x': 'X'}, 'Aaaa', 'B', 'A', {'x': 'X'}, 'B', {'x': 'Z'}]
 
->>> list(q // {"kind" : "identifier"})
-[{'kind': 'identifier', 'src': 'a'},
- {'kind': 'identifier', 'src': 'b'},
- {'kind': 'identifier', 'src': 's'},
- {'kind': 'identifier', 'src': 'printf'},
- {'kind': 'identifier', 'src': 's'},
- {'kind': 'identifier', 'src': 'a'},
- {'kind': 'identifier', 'src': 'b'}]
+We see here that the result is a list of matches, not a set, so it
+allows to count.
 
-Then, intermediat matches can be pinned and retrieved back:
+`//` the recursive version of `/`:
 
->>> list((q // {"kind" : "declaration"} >> "call")
-...      / "declarator" * {"kind" : "identifier"} << "call")
-[{'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'int'},
-  'declarator': {'kind': 'identifier', 'src': 'a'}},
- {'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'int'},
-  'declarator': {'kind': 'identifier', 'src': 'c'}}]
+>>> list(q // "x")
+['X', 'X', 'Z']
 
-Operator `>>` pins the current items to name `call` so that they are
-remembered while descending with `/`. But when descending with `/`, only those
-pinned items that allow to do so are kept. The same occurs when selecting
-with `*`. So, when `<<` is used to retrived the pinned items, they have been
-filtered with `/` and `*`.
+# Pinning matches
 
-The example above could have been achieved with only `*` using:
+Intermediate matches can be pinned and retrieved back:
 
->>> list(q // {"kind":"declaration", "declarator" : {"kind" : "identifier"}}))
-[{'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'int'},
-  'declarator': {'kind': 'identifier', 'src': 'a'}},
- {'kind': 'declaration',
-  'type': {'kind': 'primitive_type', 'src': 'int'},
-  'declarator': {'kind': 'identifier', 'src': 'c'}}]
+>>> q = Q([{"a" : {"b" : {"c" : {"x" : "X"}}}},
+...        {"a" : {"b" : {"c" : {"x" : "Z"}}}}])
+>>> list(q // {"b" : ...}
+[{'b': {'c': {'x': 'X'}}},
+ {'b': {'c': {'x': 'Z'}}}]
+>>> list(q // {"b" : ...} // {"x" : "X"})
+[{'x': 'X'}]
+>>> list((q // {"b" : ...} >> "match") // {"x" : "X"} << "match")
+[{'b': {'c': {'x': 'X'}}}]
 
-But this works only because we used `/` in the pinned version as we know
-exactly how each level is nested. If we have used `//` then this could not
-be expressed by a nested dict pattern.
+The first request searchs recursively all dicts with a key `"b"`. 
+The second request searchs within the first match for dict `{"x" : "X"}`.
+But doing so, we loose the result of the first match because we traversed its
+items. In the third request, we use operator `>>` to pin the match to name
+`"match"`, and later we use `<<` to call back this match that has been filtered
+because of the second `//`. Note that we need parentheses to respect Python
+operators precedence. Note also the `repr` of `Q` objects with pinned matches:
+
+>>> q // {"b" : ...} >> "match"
+<Q:2+1>
+
+That is: `Q` object has 2 matches and 1 pin.
+
+Sets operations are currently not supported for `Q` objects with pins.
 """
 
 import operator, sys
@@ -218,7 +243,8 @@ class Q (object) :
         self.p = dict(pinned)
         self.extend(matches)
     def __repr__ (self) :
-        return f"<{self.__class__.__name__}:{len(self)}+{len(self.p)}>"
+        p = f"+{len(self.p)}" if self.p else ""
+        return f"<{self.__class__.__name__}:{len(self)}{p}>"
     def __str__ (self) :
         t = tree(kind=f"{len(self.m)} matched, {len(self.p)} pinned",
                  children=self.m)
@@ -236,6 +262,8 @@ class Q (object) :
         return bool(self.m)
     def __iter__ (self) :
         return iter(self.m)
+    def __getitem__ (self, key) :
+        return self.m[key]
     def __and__ (self, other) :
         if self.p or other.p :
             raise NotImplementedError("cannot & queries with pins")
@@ -263,7 +291,7 @@ class Q (object) :
         elif isinstance(pat, bool) :
             return pat
         elif pat is ... :
-            return True
+            return obj is not None
         elif isinstance(obj, dict) and isinstance(pat, str) :
             return pat in obj
         elif isinstance(obj, dict) and isinstance(pat, dict) :
@@ -292,7 +320,8 @@ class Q (object) :
                 return False
             else :
                 head, tail = pat, []
-            return (all(self._match(o, p) for o, p in zip(obj, head))
+            return (len(obj) >= len(pat)
+                    and all(self._match(o, p) for o, p in zip(obj, head))
                     and all(self._match(o, p)
                             for o, p in zip(reversed(obj), reversed(tail))))
         elif isinstance(obj, list) and isinstance(pat, int) :
@@ -332,7 +361,7 @@ class Q (object) :
         return []
     def __truediv__ (self, pat) :
         "select items' children that match pat"
-        return Q(ichain(filter(partial(self._match, pat=pat), self)),
+        return Q(ichain(map(partial(self._children, pat=pat), self)),
                  self._pinned(operator.truediv, pat))
     def __floordiv__ (self, pat) :
         "select items' descendants that match pat"
