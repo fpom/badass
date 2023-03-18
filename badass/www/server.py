@@ -423,6 +423,7 @@ def result () :
         logpath = errorpath(".dbg")
         define.append("--debug")
     for key, val in form.items() :
+        val = val.encode("ascii", "replace").decode("ascii", "replace")
         define.extend(["-d", f"{key}={val}"])
     check_output(["python3", "-m", "badass", "run", script, project] + define,
                  env=ENV, log=logpath)
