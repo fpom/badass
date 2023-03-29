@@ -207,7 +207,9 @@ class Test (_Test) :
         self.test_dir = self.project_dir / f"test-{self.num:03}"
         self.repo = Repository(self.test_dir)
     def __enter__ (self) :
-        copytree(self.project_dir / "src", self.test_dir / "src")
+        copytree(self.project_dir / "src",
+                 self.test_dir / "src",
+                 dirs_exist_ok=True)
         self.repo.update()
         return self
     @cached_property
