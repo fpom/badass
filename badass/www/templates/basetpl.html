@@ -19,6 +19,7 @@
             {% if g.user.authenticated %}
             <li><a href="/" data-ajax="false">submit</a></li>
             <li><a href="/user/{{ g.user.id }}" data-ajax="false">account</a></li>
+            <li><a href="/hist/{{ g.user.id }}" data-ajax="false">submissions</a></li>
             {% if g.user.has_role("teacher") %}
             <li><a href="/teacher" data-ajax="false">teacher</a></li>
             {% endif %}

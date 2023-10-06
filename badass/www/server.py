@@ -607,3 +607,28 @@ def error (ident, action) :
         return render_template("error.html", report=Markup(txt), error=err.name)
     else :
         abort(404)
+
+##
+## list submissions
+##
+
+@app.route("/hist/<user_id>")
+@require_login
+def hist (user_id) :
+    if not (str(g.user.id) == str(user_id) or g.user.has_role("admin")) :
+        abort(401)
+    user = USER.from_id(user_id)
+    print(user)
+    hist = []
+    for row in DB(DB.submissions.user == user_id)\
+            .select(DB.submissions.date,
+                    DB.submissions.course,
+                    DB.submissions.exercise,
+                    DB.submissions.path):
+        path = pathlib.Path(row.path) / "permalink"
+        try:
+            link = path.read_text()
+        except Exception:
+            link = None
+        hist.append((row.date, row.course, row.exercise, link))
+    return render_template("hist.html", hist=hist, user=user)

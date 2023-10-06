@@ -13,6 +13,7 @@
           <th>last name</th>
           <th>e-mail</th>
           <th>group</th>
+          <th>submissions</th>
           <th>roles</th>
           <th>student number</th>
           <th>activated</th>
@@ -31,6 +32,7 @@
           {% else %}
           <td class="group"></td>
           {% endif %}
+          <td class="submissions"><a href="/hist/{{ user.id }}" data-ajax="false">submissions</a></td>
           <td class="roles">{{ user.roles|join(", ") }}</td>
           <td class="studentid">{{ user.studentid }}</td>
           <td class="activated">{{ "yes" if user.activated else "no" }}</td>

@@ -1,0 +1,37 @@
+{% extends "basetpl.html" %}
+{% block titlebar %}
+<h1>{% block title %}Submissions{% endblock %}</h1>
+{% endblock %}
+{% block content %}
+    <p>Submissions for user
+      <a href="/user/{{ user.id }}" data-ajax="false">#{{ user.id }}</a>:
+      {{ user.firstname }} {{ user.lastname }}
+      (<a href="mailto:{{ user.email }}">{{ user.email }}</a>)
+    </p>
+    <form>
+      <input id="filter-input" data-type="search" placeholder="filter submissions...">
+    </form>
+    <table data-role="table" data-filter="true" data-input="#filter-input" class="ui-responsive">
+      <thead>
+          <th>date</th>
+          <th>course</th>
+          <th>exercise</th>
+          <th>report</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for when, course, exercise, link in hist %}
+        <tr>
+          <td class="date">{{ when }}</td>
+          <td class="course">{{ course }}</td>
+          <td class="exercise">{{ exercise }}</td>
+          {% if link %}
+          <td class="report"><a href="{{ link }}" data-ajax="false">see report</a></td>
+          {% else %}
+          <td class="report">(broken)</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+{% endblock %}
