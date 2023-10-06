@@ -16,23 +16,33 @@
         {% block navbar %}
         <div data-role="navbar">
           <ul>
+            {% set count = 0 %}
             {% if g.user.authenticated %}
             <li><a href="/" data-ajax="false">submit</a></li>
             <li><a href="/user/{{ g.user.id }}" data-ajax="false">account</a></li>
             <li><a href="/hist/{{ g.user.id }}" data-ajax="false">submissions</a></li>
+            {% set count = count + 3 %}
             {% if g.user.has_role("teacher") %}
             <li><a href="/teacher" data-ajax="false">teacher</a></li>
+            {% set count = count + 1 %}
             {% endif %}
             {% if g.user.has_role("admin") %}
             <li><a href="/users" data-ajax="false">users</a></li>
+            {% set count = count + 1 %}
             {% endif %}
             {% if g.user.has_role("dev") %}
             <li><a href="/errors" data-ajax="false">errors</a></li>
+            {% set count = count + 1 %}
             {% endif %}
             <li><a href="/logout" data-ajax="false">logout</a></li>
+            {% set count = count + 1 %}
             {% else %}
             <li><a href="/login" data-ajax="false">login</a></li>
             <li><a href="/register" data-ajax="false">create account</a></li>
+            {% set count = count + 2 %}
+            {% endif %}
+            {% if count % 2 == 1 %}
+            <li><a class="ui-disabled menu-placeholder">&nbsp;</a></li>
             {% endif %}
           </ul>
         </div>

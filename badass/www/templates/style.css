@@ -151,3 +151,7 @@ li.lang-fr {
     background-color: #FDD !important;
     border-color: #800 !important;
 } 
+
+.menu-placeholder {
+	opacity: 1;
+}
