@@ -17,10 +17,11 @@
           <th>course</th>
           <th>exercise</th>
           <th>report</th>
+          <th>source code</th>
         </tr>
       </thead>
       <tbody>
-        {% for when, course, exercise, link in hist %}
+        {% for subid, when, course, exercise, link in hist %}
         <tr>
           <td class="date">{{ when }}</td>
           <td class="course">{{ course }}</td>
@@ -30,6 +31,7 @@
           {% else %}
           <td class="report">(broken)</td>
           {% endif %}
+          <td class="src"><a href="/src/{{ subid }}" data-ajax="false">get source</a></td>
         </tr>
         {% endfor %}
       </tbody>

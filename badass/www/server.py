@@ -1,5 +1,5 @@
-import collections, time, pathlib, csv, threading, zipfile, json, subprocess, \
-    secrets, os, sys, mimetypes, random, itertools, traceback, re, ast
+import collections, time, pathlib, threading, zipfile, json, subprocess, \
+    secrets, os, sys, mimetypes, random, itertools, traceback, re, ast, tempfile
 
 from operator import or_
 from datetime import datetime
@@ -621,7 +621,8 @@ def hist (user_id) :
     print(user)
     hist = []
     for row in DB(DB.submissions.user == user_id)\
-            .select(DB.submissions.date,
+            .select(DB.submissions.id,
+                    DB.submissions.date,
                     DB.submissions.course,
                     DB.submissions.exercise,
                     DB.submissions.path):
@@ -630,5 +631,30 @@ def hist (user_id) :
             link = path.read_text()
         except Exception:
             link = None
-        hist.append((row.date, row.course, row.exercise, link))
+        hist.append((row.id, row.date, row.course, row.exercise, link))
     return render_template("hist.html", hist=hist, user=user)
+
+@app.route("/src/<subid>")
+@require_login
+def src(subid):
+    row = DB(DB.submissions.id == subid)\
+        .select(DB.submissions.user,
+                DB.submissions.path)\
+        .first()
+    if not (str(g.user.id) == str(row.user) or g.user.has_role("admin")):
+        abort(401)
+    root = pathlib.Path(row.path) / "src"
+    todo = [root]
+    with tempfile.NamedTemporaryFile("wb") as tmp:
+        with zipfile.ZipFile(tmp, "w") as zf:
+            while todo:
+                path = todo.pop()
+                if path.is_dir():
+                    todo.extend(path.iterdir())
+                else:
+                    zf.write(path, path.relative_to(root))
+        tmp.flush()
+        tmp.seek(0)
+        return send_file(tmp.name,
+                         as_attachment=True,
+                         attachment_filename="src.zip")
