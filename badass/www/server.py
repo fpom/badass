@@ -641,6 +641,8 @@ def src(subid):
         .select(DB.submissions.user,
                 DB.submissions.path)\
         .first()
+    if row is None:
+        abort(404)
     if not (str(g.user.id) == str(row.user) or g.user.has_role("admin")):
         abort(401)
     root = pathlib.Path(row.path) / "src"
