@@ -33,11 +33,11 @@ class Language(BaseLanguage):
             for child in dirpath.iterdir():
                 if child.is_dir():
                     todo.append(child)
-                elif child.is_file() and (src := dirpath / child).suffix.lower() in {
+                elif child.is_file() and child.suffix.lower() in {
                     ".c",
                     ".h",
                 }:
-                    tgt = target / src.relative_to(source)
+                    tgt = target / child.relative_to(source)
                     tgt.parent.mkdir(exist_ok=True, parents=True)
                     try:
                         gcc = subprocess.Popen(
