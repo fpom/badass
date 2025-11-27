@@ -32,6 +32,7 @@ class Language(BaseLanguage):
                 if (src := dirpath / name).suffix.lower() in {".c", ".h"}:
                     tgt = target / src.relative_to(source)
                     tgt.parent.mkdir(exist_ok=True, parents=True)
+                    print(src, "=>", tgt)
                     try:
                         gcc = subprocess.Popen(
                             ["gcc", "-fpreprocessed", "-dD", "-E", "-P", "-"],
