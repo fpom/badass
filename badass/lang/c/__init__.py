@@ -42,7 +42,7 @@ class Language(BaseLanguage):
                     try:
                         gcc = subprocess.Popen(
                             ["gcc", "-fpreprocessed", "-dD", "-E", "-P", "-"],
-                            stdin=src.open(**encoding),
+                            stdin=child.open(**encoding),
                             stdout=subprocess.PIPE,
                             **encoding,
                         )
