@@ -27,9 +27,16 @@ class Language(BaseLanguage):
         self.log = []
 
     def cleanup(self, source, target):
-        for dirpath, _, filenames in source.walk():
-            for name in filenames:
-                if (src := dirpath / name).suffix.lower() in {".c", ".h"}:
+        todo = [source]
+        while todo:
+            dirpath = todo.pop()
+            for child in dirpath.iterdir():
+                if child.is_dir():
+                    todo.append(child)
+                elif child.is_file() and (src := dirpath / child).suffix.lower() in {
+                    ".c",
+                    ".h",
+                }:
                     tgt = target / src.relative_to(source)
                     tgt.parent.mkdir(exist_ok=True, parents=True)
                     try:
