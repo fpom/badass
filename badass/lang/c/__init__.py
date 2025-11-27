@@ -54,8 +54,7 @@ class Language(BaseLanguage):
                         )
                         clang.wait()
                         gcc.wait()
-                        src = clang.stdout.read()
-                        tgt.write_text(src, **encoding)
+                        tgt.write_text(clang.stdout.read(), **encoding)
                     except Exception as err:
                         tgt.with_suffix(".err").write_text(
                             f"{err.__class__.__name__}: {err}\n"
