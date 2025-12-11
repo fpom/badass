@@ -1,4 +1,4 @@
-import collections, time, pathlib, threading, zipfile, json, subprocess, secrets, os, sys, mimetypes, random, itertools, traceback, re, ast, tempfile, io, csv, base64, gzip
+import collections, time, pathlib, threading, zipfile, json, subprocess, secrets, os, sys, mimetypes, random, itertools, traceback, re, ast, tempfile, io, csv
 
 from operator import or_
 from datetime import datetime
@@ -338,16 +338,7 @@ def users():
         if not grp or user["group"] in grp:
             user["roles"] = "/".join(user["roles"])
             out.writerow(user)
-    data = base64.b64encode(gzip.compress(outfile.getvalue().encode("utf-8"))).decode(
-        "utf-8"
-    )
-    flash(
-        Markup(
-            f'<a download="users.csv.gz" href="data:application/octet-stream;base64,{data}" data-ajax="false">Download <tt>users.csv.gz</tt></a>'
-        ),
-        "info",
-    )
-    return redirect(url_for("users"))
+    return outfile.getvalue(), {"Content-Type": "text/csv"}
 
 
 @app.route("/user/<user_id>", methods=["GET", "POST"])
