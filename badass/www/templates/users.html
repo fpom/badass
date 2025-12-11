@@ -3,6 +3,13 @@
 <h1>{% block title %}Badass users{% endblock %}</h1>
 {% endblock %}
 {% block content %}
+    <form method="POST" action="{{ url_for('users') }}" data-ajax="false">
+        {% for gname, gdesc in groups.items() | sort %}
+        <input type="checkbox" name="grp-{{ gname }}" id="grp-{{ gname }}">
+        <label for="grp-{{ gname }}">{{ gname }}: {{ gdesc }}</label>
+        {% endfor %}
+      <input type="submit" value="Get users list">
+    </form>
     <form>
       <input id="filter-input" data-type="search" placeholder="filter users...">
     </form>
