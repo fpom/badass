@@ -225,6 +225,7 @@ class Report (object) :
         try :
             with ZipFile(report) as zf :
                 test_data = io.StringIO(zf.read("report.csv").decode(**encoding))
+            test = Test.from_csv(test_data)
         except :
             self.rows.append([row.users.studentid,
                               name,
@@ -233,7 +234,6 @@ class Report (object) :
                               False,
                               row.submissions.date])
             return
-        test = Test.from_csv(test_data)
         try :
             permalink = (path / "permalink").read_text(**encoding)
         except :
